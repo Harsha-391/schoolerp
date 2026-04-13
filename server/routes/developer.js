@@ -5,191 +5,225 @@ import db from '../config/db.js';
 import { authMiddleware, roleMiddleware } from '../middleware/auth.js';
 
 const router = Router();
-
-// All routes require developer role
 router.use(authMiddleware, roleMiddleware('developer'));
 
+const GRADE_NAMES = ['Nursery','LKG','UKG','1st','2nd','3rd','4th','5th','6th','7th','8th','9th','10th','11th','12th'];
+
 // GET /api/developer/dashboard
-router.get('/dashboard', (req, res) => {
-  const totalSchools = db.schools.length;
-  const activeSchools = db.schools.filter(s => s.is_active).length;
-  const totalStudents = db.students.length;
-  const totalStaff = db.staff.length;
-  const totalRevenue = db.schools.reduce((sum, school) => {
-    const studentCount = db.students.filter(s => s.school_id === school.id).length;
-    return sum + (studentCount * school.rate_per_student);
-  }, 0);
+router.get('/dashboard', async (_req, res) => {
+  try {
+    const [schools]  = await db.query('SELECT * FROM schools');
+    const [[{ totalStudents }]] = await db.query('SELECT COUNT(*) AS totalStudents FROM students');
+    const [[{ totalStaff }]]   = await db.query('SELECT COUNT(*) AS totalStaff FROM staff');
 
-  const schoolStats = db.schools.map(school => {
-    const studentCount = db.students.filter(s => s.school_id === school.id).length;
-    const staffCount = db.staff.filter(s => s.school_id === school.id).length;
-    const revenue = studentCount * school.rate_per_student;
-    const totalFees = db.fee_payments
-      .filter(p => p.school_id === school.id && p.status === 'paid')
-      .reduce((sum, p) => sum + p.amount, 0);
-    return {
-      ...school,
-      student_count: studentCount,
-      staff_count: staffCount,
-      platform_revenue: revenue,
-      fees_collected: totalFees,
-    };
-  });
+    const [studentCounts] = await db.query(
+      'SELECT school_id, COUNT(*) AS cnt FROM students GROUP BY school_id'
+    );
+    const [staffCounts] = await db.query(
+      'SELECT school_id, COUNT(*) AS cnt FROM staff GROUP BY school_id'
+    );
+    const [feeTotals] = await db.query(
+      "SELECT school_id, SUM(amount) AS total FROM fee_payments WHERE status='paid' GROUP BY school_id"
+    );
 
-  // Monthly revenue chart data
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const revenueChart = months.map((m, i) => ({
-    month: m,
-    revenue: Math.floor(totalRevenue * (0.7 + Math.random() * 0.6) / 12),
-  }));
+    const stuMap  = Object.fromEntries(studentCounts.map(r => [r.school_id, r.cnt]));
+    const stfMap  = Object.fromEntries(staffCounts.map(r => [r.school_id, r.cnt]));
+    const feeMap  = Object.fromEntries(feeTotals.map(r => [r.school_id, Number(r.total)]));
 
-  res.json({
-    totalSchools,
-    activeSchools,
-    totalStudents,
-    totalStaff,
-    totalRevenue,
-    schoolStats,
-    revenueChart,
-  });
+    const schoolStats = schools.map(s => ({
+      ...s,
+      student_count:    stuMap[s.id] || 0,
+      staff_count:      stfMap[s.id] || 0,
+      platform_revenue: (stuMap[s.id] || 0) * Number(s.rate_per_student),
+      fees_collected:   feeMap[s.id] || 0,
+    }));
+
+    const totalRevenue = schoolStats.reduce((sum, s) => sum + s.platform_revenue, 0);
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const revenueChart = months.map(month => ({
+      month,
+      revenue: Math.floor(totalRevenue * (0.7 + ((months.indexOf(month) * 17) % 60) / 100) / 12),
+    }));
+
+    res.json({
+      totalSchools:  schools.length,
+      activeSchools: schools.filter(s => s.is_active).length,
+      totalStudents: Number(totalStudents),
+      totalStaff:    Number(totalStaff),
+      totalRevenue,
+      schoolStats,
+      revenueChart,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // GET /api/developer/schools
-router.get('/schools', (req, res) => {
-  const schools = db.schools.map(school => ({
-    ...school,
-    student_count: db.students.filter(s => s.school_id === school.id).length,
-    staff_count: db.staff.filter(s => s.school_id === school.id).length,
-    admin: db.users.find(u => u.school_id === school.id && u.role === 'school_admin'),
-  }));
-  res.json(schools);
+router.get('/schools', async (_req, res) => {
+  try {
+    const [schools] = await db.query('SELECT * FROM schools ORDER BY created_at DESC');
+    const [stuCounts] = await db.query('SELECT school_id, COUNT(*) AS cnt FROM students GROUP BY school_id');
+    const [stfCounts] = await db.query('SELECT school_id, COUNT(*) AS cnt FROM staff GROUP BY school_id');
+    const [admins]    = await db.query("SELECT * FROM users WHERE role = 'school_admin'");
+
+    const stuMap = Object.fromEntries(stuCounts.map(r => [r.school_id, r.cnt]));
+    const stfMap = Object.fromEntries(stfCounts.map(r => [r.school_id, r.cnt]));
+    const admMap = Object.fromEntries(admins.map(u => [u.school_id, u]));
+
+    res.json(schools.map(s => ({
+      ...s,
+      student_count: stuMap[s.id] || 0,
+      staff_count:   stfMap[s.id] || 0,
+      admin:         admMap[s.id] || null,
+    })));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // POST /api/developer/schools
 router.post('/schools', async (req, res) => {
-  const { name, address, city, state, phone, email, subdomain, rate_per_student, payment_methods, admin_name, admin_email, admin_password, razorpay_account_id } = req.body;
+  try {
+    const { name, address, city, state, phone, email, subdomain, rate_per_student,
+            payment_methods, admin_name, admin_email, admin_password, razorpay_account_id } = req.body;
 
-  // Check subdomain uniqueness
-  if (db.schools.find(s => s.subdomain === subdomain)) {
-    return res.status(400).json({ error: 'Subdomain already in use' });
+    const [[existing]] = await db.query('SELECT id FROM schools WHERE subdomain = ?', [subdomain]);
+    if (existing) return res.status(400).json({ error: 'Subdomain already in use' });
+
+    const schoolId = uuidv4();
+    await db.query(
+      `INSERT INTO schools (id,name,address,city,state,phone,email,logo,subdomain,rate_per_student,payment_methods,razorpay_account_id,is_active,created_at)
+       VALUES (?,?,?,?,?,?,?,NULL,?,?,?,?,1,NOW())`,
+      [schoolId, name, address||'', city||'', state||'', phone||'', email||'',
+       subdomain, rate_per_student||200,
+       JSON.stringify(payment_methods || ['online','cash']),
+       razorpay_account_id||null]
+    );
+
+    if (admin_email && admin_password) {
+      const hash = await bcryptjs.hash(admin_password, 10);
+      await db.query(
+        'INSERT INTO users (id,email,password,name,role,school_id,phone,created_at) VALUES (?,?,?,?,?,?,?,NOW())',
+        [uuidv4(), admin_email, hash, admin_name||'School Admin', 'school_admin', schoolId, phone||'']
+      );
+    }
+
+    // Default grades + sections
+    for (let i = 0; i < GRADE_NAMES.length; i++) {
+      const gId = uuidv4();
+      await db.query(
+        'INSERT INTO grades (id,school_id,name,`order`) VALUES (?,?,?,?)',
+        [gId, schoolId, GRADE_NAMES[i], i]
+      );
+      for (const sec of ['A', 'B']) {
+        await db.query(
+          'INSERT INTO sections (id,grade_id,school_id,name) VALUES (?,?,?,?)',
+          [uuidv4(), gId, schoolId, sec]
+        );
+      }
+    }
+
+    const [[newSchool]] = await db.query('SELECT * FROM schools WHERE id = ?', [schoolId]);
+    res.status(201).json(newSchool);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
   }
-
-  const schoolId = uuidv4();
-  const newSchool = {
-    id: schoolId,
-    name,
-    address: address || '',
-    city: city || '',
-    state: state || '',
-    phone: phone || '',
-    email: email || '',
-    logo: null,
-    subdomain,
-    rate_per_student: rate_per_student || 200,
-    payment_methods: payment_methods || ['online', 'cash'],
-    razorpay_account_id: razorpay_account_id || null,
-    is_active: true,
-    created_at: new Date().toISOString(),
-  };
-  db.schools.push(newSchool);
-
-  // Create admin user for this school
-  if (admin_email && admin_password) {
-    const hash = await bcryptjs.hash(admin_password, 10);
-    db.users.push({
-      id: uuidv4(),
-      email: admin_email,
-      password: hash,
-      name: admin_name || 'School Admin',
-      role: 'school_admin',
-      school_id: schoolId,
-      avatar: null,
-      phone: phone || '',
-      created_at: new Date().toISOString(),
-    });
-  }
-
-  // Create default grades
-  const defaultGrades = ['Nursery', 'LKG', 'UKG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'];
-  defaultGrades.forEach((g, idx) => {
-    const gId = uuidv4();
-    db.grades.push({ id: gId, school_id: schoolId, name: g, order: idx });
-    ['A', 'B'].forEach(sec => {
-      db.sections.push({ id: uuidv4(), grade_id: gId, school_id: schoolId, name: sec });
-    });
-  });
-
-  res.status(201).json(newSchool);
 });
 
 // PUT /api/developer/schools/:id
 router.put('/schools/:id', async (req, res) => {
-  const idx = db.schools.findIndex(s => s.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'School not found' });
+  try {
+    const { admin_name, admin_email, admin_password, payment_methods, ...updates } = req.body;
 
-  const { admin_name, admin_email, admin_password, ...updates } = req.body;
-  
-  db.schools[idx] = { ...db.schools[idx], ...updates };
+    if (payment_methods) updates.payment_methods = JSON.stringify(payment_methods);
 
-  // Update admin user if details provided
-  const adminUser = db.users.find(u => u.school_id === req.params.id && u.role === 'school_admin');
-  if (adminUser) {
-    if (admin_name) adminUser.name = admin_name;
-    if (admin_email) adminUser.email = admin_email;
-    if (admin_password) {
-      adminUser.password = await bcryptjs.hash(admin_password, 10);
+    const fields = ['name','address','city','state','phone','email','subdomain',
+                    'rate_per_student','payment_methods','razorpay_account_id','is_active'];
+    const toSet = Object.fromEntries(Object.entries(updates).filter(([k]) => fields.includes(k)));
+
+    if (Object.keys(toSet).length > 0) {
+      const setClause = Object.keys(toSet).map(k => `${k} = ?`).join(', ');
+      await db.query(`UPDATE schools SET ${setClause} WHERE id = ?`, [...Object.values(toSet), req.params.id]);
     }
-  }
 
-  res.json(db.schools[idx]);
+    if (admin_name || admin_email || admin_password) {
+      const adminUpdates = [];
+      const adminVals = [];
+      if (admin_name)     { adminUpdates.push('name = ?');     adminVals.push(admin_name); }
+      if (admin_email)    { adminUpdates.push('email = ?');    adminVals.push(admin_email); }
+      if (admin_password) {
+        const h = await bcryptjs.hash(admin_password, 10);
+        adminUpdates.push('password = ?'); adminVals.push(h);
+      }
+      if (adminUpdates.length) {
+        adminVals.push(req.params.id);
+        await db.query(
+          `UPDATE users SET ${adminUpdates.join(', ')} WHERE school_id = ? AND role = 'school_admin'`,
+          adminVals
+        );
+      }
+    }
+
+    const [[school]] = await db.query('SELECT * FROM schools WHERE id = ?', [req.params.id]);
+    res.json(school);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // DELETE /api/developer/schools/:id
-router.delete('/schools/:id', (req, res) => {
-  const idx = db.schools.findIndex(s => s.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'School not found' });
-  db.schools[idx].is_active = false;
-  res.json({ message: 'School deactivated' });
+router.delete('/schools/:id', async (req, res) => {
+  try {
+    await db.query('UPDATE schools SET is_active = 0 WHERE id = ?', [req.params.id]);
+    res.json({ message: 'School deactivated' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // GET /api/developer/schools/:id/analytics
-router.get('/schools/:id/analytics', (req, res) => {
-  const school = db.schools.find(s => s.id === req.params.id);
-  if (!school) return res.status(404).json({ error: 'School not found' });
+router.get('/schools/:id/analytics', async (req, res) => {
+  try {
+    const [[school]] = await db.query('SELECT * FROM schools WHERE id = ?', [req.params.id]);
+    if (!school) return res.status(404).json({ error: 'School not found' });
 
-  const students = db.students.filter(s => s.school_id === school.id);
-  const staffMembers = db.staff.filter(s => s.school_id === school.id);
-  const grades = db.grades.filter(g => g.school_id === school.id);
-  const payments = db.fee_payments.filter(p => p.school_id === school.id);
+    const sid = req.params.id;
+    const [students]  = await db.query('SELECT * FROM students WHERE school_id = ?', [sid]);
+    const [staffList] = await db.query('SELECT * FROM staff WHERE school_id = ?', [sid]);
+    const [grades]    = await db.query('SELECT * FROM grades WHERE school_id = ?', [sid]);
+    const [payments]  = await db.query('SELECT * FROM fee_payments WHERE school_id = ?', [sid]);
+    const [attendance]= await db.query('SELECT * FROM attendance_students WHERE school_id = ?', [sid]);
 
-  const gradeDistribution = grades.map(g => ({
-    grade: g.name,
-    count: students.filter(s => s.grade_id === g.id).length,
-  })).filter(g => g.count > 0);
+    const gradeDistribution = grades.map(g => ({
+      grade: g.name,
+      count: students.filter(s => s.grade_id === g.id).length,
+    })).filter(g => g.count > 0);
 
-  const totalFees = payments.reduce((sum, p) => sum + p.amount, 0);
-  const paidFees = payments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0);
+    const paidFees  = payments.filter(p => p.status === 'paid').reduce((s, p) => s + Number(p.amount), 0);
+    const present   = attendance.filter(a => a.status === 'present').length;
+    const avgAtt    = attendance.length > 0 ? ((present / attendance.length) * 100).toFixed(1) : 0;
 
-  const attendanceRate = db.attendance_students.filter(a => a.school_id === school.id);
-  const presentCount = attendanceRate.filter(a => a.status === 'present').length;
-  const avgAttendance = attendanceRate.length > 0 ? ((presentCount / attendanceRate.length) * 100).toFixed(1) : 0;
-
-  res.json({
-    school,
-    student_count: students.length,
-    staff_count: staffMembers.length,
-    grade_count: grades.length,
-    total_fees_collected: totalFees,
-    paid_fees: paidFees,
-    platform_revenue: students.length * school.rate_per_student,
-    avg_attendance: avgAttendance,
-    grade_distribution: gradeDistribution,
-    payment_methods: school.payment_methods,
-    students,
-    staff: staffMembers,
-    attendance: attendanceRate,
-    transactions: payments,
-  });
+    res.json({
+      school,
+      student_count:        students.length,
+      staff_count:          staffList.length,
+      grade_count:          grades.length,
+      total_fees_collected: paidFees,
+      paid_fees:            paidFees,
+      platform_revenue:     students.length * Number(school.rate_per_student),
+      avg_attendance:       avgAtt,
+      grade_distribution:   gradeDistribution,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 export default router;

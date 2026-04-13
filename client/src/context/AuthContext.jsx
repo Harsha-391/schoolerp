@@ -49,8 +49,12 @@ export function AuthProvider({ children }) {
     init();
   }, []);
 
-  const login = async (email, password) => {
-    const res = await api.post('/auth/login', { email, password });
+  const login = async (identifier, password) => {
+    const res = await api.post('/auth/login', { identifier, password });
+    // First-time login — password change required, no token yet
+    if (res.data.requiresPasswordChange) {
+      return res.data; // { requiresPasswordChange, userId, role }
+    }
     const { token, user: userData, school: schoolData } = res.data;
     localStorage.setItem('erp_token', token);
     localStorage.setItem('erp_user', JSON.stringify(userData));
