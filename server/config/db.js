@@ -26,6 +26,7 @@ const db = {
   class_teacher_assignments: [],
   school_payment_config: [],  // Each school's bank/UPI/QR details
   payment_requests: [],       // Student payment submissions awaiting verification
+  other_expenses: [],         // Admin-logged non-salary expenses (utilities, maintenance, etc.)
 };
 
 // ============ SEED DATA ============
@@ -346,25 +347,79 @@ async function seedDatabase() {
     );
   }
 
-  // Fee payments for some students
+  // Fee payments — current year, realistic monthly spread
   const students = db.students.filter(s => s.school_id === school1Id);
   const feeStructures = db.fees_structure.filter(f => f.school_id === school1Id);
-  students.slice(0, 5).forEach((student, idx) => {
-    feeStructures.slice(0, 2).forEach(fee => {
+  const seedYear = new Date().getFullYear();
+  const seedMonth = new Date().getMonth() + 1; // 1-indexed current month
+  const payMethods = ['online', 'cash', 'cheque', 'upi'];
+
+  // Monthly fees (tuition + transport): all students, for each completed past month
+  const monthlyFees = feeStructures.filter(f => f.frequency === 'monthly');
+  const paidMonths = Math.min(seedMonth - 1, 6); // up to 6 past months
+  for (let m = 1; m <= paidMonths; m++) {
+    const mm = String(m).padStart(2, '0');
+    students.forEach((student, sIdx) => {
+      // Simulate ~85% collection rate — some students pay late
+      if (sIdx === students.length - 1 && m === paidMonths) return; // one student pending latest month
+      monthlyFees.forEach((fee, fIdx) => {
+        db.fee_payments.push({
+          id: uuidv4(),
+          student_id: student.id,
+          school_id: school1Id,
+          fee_structure_id: fee.id,
+          amount: fee.amount,
+          payment_date: `${seedYear}-${mm}-${10 + sIdx}`,
+          payment_method: payMethods[(sIdx + fIdx) % payMethods.length],
+          status: 'paid',
+          receipt_no: `REC-${seedYear}${mm}-${sIdx}-${fIdx}`,
+          month: `${seedYear}-${mm}`,
+        });
+      });
+    });
+  }
+
+  // Quarterly fee (Lab Fee): paid in first month of each quarter that has passed
+  const labFee = feeStructures.find(f => f.frequency === 'quarterly');
+  if (labFee) {
+    [1, 4, 7, 10].forEach(qMonth => {
+      if (qMonth >= seedMonth) return; // only past quarters
+      const mm = String(qMonth).padStart(2, '0');
+      students.forEach((student, sIdx) => {
+        db.fee_payments.push({
+          id: uuidv4(),
+          student_id: student.id,
+          school_id: school1Id,
+          fee_structure_id: labFee.id,
+          amount: labFee.amount,
+          payment_date: `${seedYear}-${mm}-20`,
+          payment_method: payMethods[sIdx % payMethods.length],
+          status: 'paid',
+          receipt_no: `REC-${seedYear}${mm}-LAB-${sIdx}`,
+          month: `${seedYear}-${mm}`,
+        });
+      });
+    });
+  }
+
+  // Annual fee: paid in January if we're past Jan
+  const annualFee = feeStructures.find(f => f.frequency === 'annual');
+  if (annualFee && seedMonth > 1) {
+    students.forEach((student, sIdx) => {
       db.fee_payments.push({
         id: uuidv4(),
         student_id: student.id,
         school_id: school1Id,
-        fee_structure_id: fee.id,
-        amount: fee.amount,
-        payment_date: `2024-0${idx + 1}-15`,
-        payment_method: ['online', 'cash', 'cheque'][idx % 3],
+        fee_structure_id: annualFee.id,
+        amount: annualFee.amount,
+        payment_date: `${seedYear}-01-05`,
+        payment_method: payMethods[sIdx % payMethods.length],
         status: 'paid',
-        receipt_no: `REC-${Date.now()}-${idx}`,
-        month: `2024-0${idx + 1}`,
+        receipt_no: `REC-${seedYear}01-ANN-${sIdx}`,
+        month: `${seedYear}-01`,
       });
     });
-  });
+  }
 
   // Exams
   const exam1Id = uuidv4();
@@ -492,6 +547,34 @@ async function seedDatabase() {
       });
     });
   }
+
+  // Other expenses for school 1 — only seed past months so charts match income data
+  const expenseTemplates = [
+    { category: 'Utilities',   description: 'Electricity Bill',       amounts: [8200, 7900, 9100, 8500, 7600, 8800] },
+    { category: 'Utilities',   description: 'Internet & Telephone',   amounts: [3500, 3500, 3500, 3500, 3500, 3500] },
+    { category: 'Maintenance', description: 'Building Maintenance',   amounts: [5000,    0, 12000, 4000,    0, 6000] },
+    { category: 'Stationery',  description: 'Office & Lab Supplies',  amounts: [2200, 1800,  2500, 1900, 2100, 2400] },
+    { category: 'Transport',   description: 'School Bus Maintenance', amounts: [4500, 3200,  5800, 4100, 3700, 4900] },
+    { category: 'Other',       description: 'Miscellaneous',          amounts: [1200,  900,  1500, 1100,  800, 1300] },
+  ];
+  expenseTemplates.forEach(tpl => {
+    tpl.amounts.forEach((amt, idx) => {
+      if (amt === 0) return;
+      const month = idx + 1;
+      if (month >= seedMonth) return; // only log expenses for completed past months
+      const mm = String(month).padStart(2, '0');
+      db.other_expenses.push({
+        id: uuidv4(),
+        school_id: school1Id,
+        category: tpl.category,
+        description: tpl.description,
+        amount: amt,
+        date: `${seedYear}-${mm}-05`,
+        month: `${seedYear}-${mm}`,
+        created_at: new Date().toISOString(),
+      });
+    });
+  });
 
   console.log('✅ Database seeded successfully');
   console.log(`   📚 ${db.schools.length} schools`);

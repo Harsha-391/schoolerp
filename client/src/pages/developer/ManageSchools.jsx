@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import api from '../../utils/api';
-import { Plus, School, Users, GraduationCap, MapPin, Globe, X, Edit, Trash2, Eye } from 'lucide-react';
+import { Plus, School, Users, GraduationCap, MapPin, Globe, X, Edit, Trash2, Eye, ExternalLink } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { getSchoolUrl } from '../../utils/subdomain';
 
 export default function ManageSchools() {
   const [schools, setSchools] = useState([]);
@@ -97,9 +98,15 @@ export default function ManageSchools() {
                     </div>
                   </td>
                   <td>
-                    <span className="badge badge-purple">
-                      <Globe size={10} /> {school.subdomain}.erp.com
-                    </span>
+                    <a
+                      href={getSchoolUrl(school.subdomain)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="badge badge-purple"
+                      style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                    >
+                      <Globe size={10} /> {school.subdomain}.localhost <ExternalLink size={9} />
+                    </a>
                   </td>
                   <td><GraduationCap size={13} style={{ marginRight: '4px' }} />{school.student_count}</td>
                   <td><Users size={13} style={{ marginRight: '4px' }} />{school.staff_count}</td>

@@ -5,6 +5,21 @@ import { generateToken, authMiddleware } from '../middleware/auth.js';
 
 const router = Router();
 
+// GET /api/auth/school/:subdomain — public, no auth required
+// Used by the frontend to resolve a subdomain → school info for login page branding
+router.get('/school/:subdomain', (req, res) => {
+  const school = db.schools.find(s => s.subdomain === req.params.subdomain && s.is_active);
+  if (!school) return res.status(404).json({ error: 'School not found' });
+  res.json({
+    id: school.id,
+    name: school.name,
+    subdomain: school.subdomain,
+    logo: school.logo,
+    city: school.city,
+    state: school.state,
+  });
+});
+
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
   try {

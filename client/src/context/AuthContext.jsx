@@ -1,26 +1,52 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import api from '../utils/api';
+import { getSubdomain, isAdminPortal as checkAdminPortal, isSchoolPortal as checkSchoolPortal } from '../utils/subdomain';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [school, setSchool] = useState(null);
+  const [user, setUser]       = useState(null);
+  const [school, setSchool]   = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Portal type — resolved once on mount from the hostname
+  const [subdomain, setSubdomain]       = useState(null);
+  const [adminPortal, setAdminPortal]   = useState(false); // true on admin.acadmay.in
+  const [portalSchool, setPortalSchool] = useState(null);  // school info when on a school subdomain
+
   useEffect(() => {
-    const token = localStorage.getItem('erp_token');
-    const savedUser = localStorage.getItem('erp_user');
-    if (token && savedUser) {
-      try {
-        setUser(JSON.parse(savedUser));
-        const savedSchool = localStorage.getItem('erp_school');
-        if (savedSchool) setSchool(JSON.parse(savedSchool));
-      } catch {
-        logout();
+    const init = async () => {
+      const sub = getSubdomain();
+      setSubdomain(sub);
+      setAdminPortal(checkAdminPortal());
+
+      // If it's a school subdomain, fetch school info for login-page branding
+      if (checkSchoolPortal()) {
+        try {
+          const res = await api.get(`/auth/school/${sub}`);
+          setPortalSchool(res.data);
+        } catch {
+          setPortalSchool(null); // subdomain exists but no matching school
+        }
       }
-    }
-    setLoading(false);
+
+      // Restore saved session
+      const token     = localStorage.getItem('erp_token');
+      const savedUser = localStorage.getItem('erp_user');
+      if (token && savedUser) {
+        try {
+          setUser(JSON.parse(savedUser));
+          const savedSchool = localStorage.getItem('erp_school');
+          if (savedSchool) setSchool(JSON.parse(savedSchool));
+        } catch {
+          logout();
+        }
+      }
+
+      setLoading(false);
+    };
+
+    init();
   }, []);
 
   const login = async (email, password) => {
@@ -43,7 +69,11 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, school, loading, login, logout }}>
+    <AuthContext.Provider value={{
+      user, school, loading,
+      login, logout,
+      subdomain, adminPortal, portalSchool,
+    }}>
       {children}
     </AuthContext.Provider>
   );

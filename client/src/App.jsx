@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { getSubdomain, getAdminUrl, isAdminPortal, isSchoolPortal } from './utils/subdomain';
 
 // Pages
 import Login from './pages/Login';
@@ -21,6 +22,7 @@ import LeaveManagement from './pages/admin/LeaveManagement';
 import HolidayCalendar from './pages/admin/HolidayCalendar';
 import PaymentVerification from './pages/admin/PaymentVerification';
 import PaymentConfig from './pages/admin/PaymentConfig';
+import FinanceAnalytics from './pages/admin/FinanceAnalytics';
 
 // Staff
 import StaffDashboard from './pages/staff/StaffDashboard';
@@ -47,6 +49,13 @@ function ProtectedRoute({ children, allowedRoles }) {
 
 function RoleRedirect() {
   const { user, loading } = useAuth();
+
+  // Root domain with no subdomain → redirect to admin.acadmay.in (or admin.localhost)
+  if (!getSubdomain()) {
+    window.location.replace(getAdminUrl());
+    return null;
+  }
+
   if (loading) return null;
   if (!user) return <Navigate to="/login" />;
   const redirectMap = {
@@ -84,6 +93,7 @@ export default function App() {
           <Route path="/admin/holidays" element={<ProtectedRoute allowedRoles={['school_admin']}><HolidayCalendar /></ProtectedRoute>} />
           <Route path="/admin/payments" element={<ProtectedRoute allowedRoles={['school_admin']}><PaymentVerification /></ProtectedRoute>} />
           <Route path="/admin/payment-config" element={<ProtectedRoute allowedRoles={['school_admin']}><PaymentConfig /></ProtectedRoute>} />
+          <Route path="/admin/finance" element={<ProtectedRoute allowedRoles={['school_admin']}><FinanceAnalytics /></ProtectedRoute>} />
 
           {/* Staff */}
           <Route path="/staff" element={<ProtectedRoute allowedRoles={['staff']}><StaffDashboard /></ProtectedRoute>} />

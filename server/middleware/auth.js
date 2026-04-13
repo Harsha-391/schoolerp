@@ -1,6 +1,8 @@
 import jwt from 'jsonwebtoken';
+import dotenv from 'dotenv';
+dotenv.config();
 
-const JWT_SECRET = 'school-erp-secret-key-2024';
+const JWT_SECRET = process.env.JWT_SECRET;
 
 export function generateToken(user) {
   return jwt.sign(

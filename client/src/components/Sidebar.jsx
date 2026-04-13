@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, School, BarChart3, CreditCard, Users, GraduationCap,
   BookOpen, Calendar, ClipboardList, QrCode, Clock, FileText, UserCircle,
-  DollarSign, Award, Settings, LogOut, ChevronRight, Bell
+  DollarSign, Award, Settings, LogOut, ChevronRight, Bell, TrendingUp
 } from 'lucide-react';
 
 const navConfig = {
@@ -31,6 +31,7 @@ const navConfig = {
       { label: 'Exams & Marks', icon: ClipboardList, path: '/admin/exams' },
       { section: 'Finance' },
       { label: 'Fee Management', icon: DollarSign, path: '/admin/fees' },
+      { label: 'Finance Analytics', icon: TrendingUp, path: '/admin/finance' },
       { label: 'Verify Payments', icon: CreditCard, path: '/admin/payments' },
       { label: 'Payment Settings', icon: Settings, path: '/admin/payment-config' },
       { section: 'Other' },

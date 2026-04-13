@@ -1,5 +1,9 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import authRoutes from './routes/auth.js';
 import developerRoutes from './routes/developer.js';
 import adminRoutes from './routes/admin.js';
@@ -10,12 +14,35 @@ import paymentRoutes from './routes/payments.js';
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middleware
-app.use(cors());
+// Allow the base origin and any subdomain of it.
+// e.g. CORS_ORIGIN=http://localhost:5173 → also allows http://dps.localhost:5173
+const corsBase = process.env.CORS_ORIGIN || 'http://localhost:5173';
+const corsBaseHost = corsBase.replace(/^https?:\/\//, ''); // strip protocol
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true); // non-browser / same-origin requests
+    const originHost = origin.replace(/^https?:\/\//, '');
+    if (originHost === corsBaseHost || originHost.endsWith('.' + corsBaseHost)) {
+      return callback(null, true);
+    }
+    callback(new Error(`CORS: origin ${origin} not allowed`));
+  },
+  credentials: true,
+}));
 app.use(express.json({ limit: '10mb' }));
 
+// Rate limiting on auth endpoints (20 requests per 15 minutes per IP)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: 'Too many login attempts, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Routes
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/developer', developerRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/staff', staffRoutes);

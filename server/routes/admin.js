@@ -388,4 +388,157 @@ router.get('/subjects', (req, res) => {
   res.json(subjects);
 });
 
+// =================== FINANCE ANALYTICS ===================
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// GET /api/admin/finance/analytics?year=2025
+router.get('/finance/analytics', (req, res) => {
+  const schoolId = req.user.school_id;
+  const year = parseInt(req.query.year) || new Date().getFullYear();
+
+  const staffMembers = db.staff.filter(s => s.school_id === schoolId && s.is_active);
+  const monthlySalaryExpense = staffMembers.reduce((sum, s) => sum + (s.salary || 0), 0);
+
+  // Build month-by-month breakdown
+  const monthly = MONTH_NAMES.map((name, idx) => {
+    const monthNum = idx + 1;
+    const monthKey = `${year}-${String(monthNum).padStart(2, '0')}`;
+
+    // Income: paid fee payments in this month
+    const income = db.fee_payments
+      .filter(p => p.school_id === schoolId && p.status === 'paid' && p.payment_date?.startsWith(monthKey))
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    // Other expenses logged for this month
+    const otherExpense = db.other_expenses
+      .filter(e => e.school_id === schoolId && e.month === monthKey)
+      .reduce((sum, e) => sum + e.amount, 0);
+
+    // Only count salary for months that have any data or are not in the future
+    const now = new Date();
+    const isPastOrCurrent = (year < now.getFullYear()) || (year === now.getFullYear() && monthNum <= now.getMonth() + 1);
+    const salaryExpense = isPastOrCurrent ? monthlySalaryExpense : 0;
+    const totalExpense = salaryExpense + otherExpense;
+    const profit = income - totalExpense;
+
+    return {
+      month: name,
+      month_num: monthNum,
+      month_key: monthKey,
+      income,
+      salary_expense: salaryExpense,
+      other_expense: otherExpense,
+      total_expense: totalExpense,
+      profit,
+      profit_margin: income > 0 ? parseFloat(((profit / income) * 100).toFixed(1)) : 0,
+    };
+  });
+
+  // Year totals
+  const totalIncome = monthly.reduce((s, m) => s + m.income, 0);
+  const totalSalary = monthly.reduce((s, m) => s + m.salary_expense, 0);
+  const totalOther = monthly.reduce((s, m) => s + m.other_expense, 0);
+  const totalExpenses = totalSalary + totalOther;
+  const netProfit = totalIncome - totalExpenses;
+
+  // Income breakdown by fee type
+  const incomeByFeeType = {};
+  db.fee_payments
+    .filter(p => p.school_id === schoolId && p.status === 'paid' && p.payment_date?.startsWith(String(year)))
+    .forEach(p => {
+      const feeType = db.fees_structure.find(f => f.id === p.fee_structure_id);
+      const name = feeType?.name || 'Other';
+      incomeByFeeType[name] = (incomeByFeeType[name] || 0) + p.amount;
+    });
+
+  // Income breakdown by payment method
+  const incomeByMethod = {};
+  db.fee_payments
+    .filter(p => p.school_id === schoolId && p.status === 'paid' && p.payment_date?.startsWith(String(year)))
+    .forEach(p => {
+      const method = p.payment_method || 'other';
+      incomeByMethod[method] = (incomeByMethod[method] || 0) + p.amount;
+    });
+
+  // Expense breakdown: salary per staff member
+  const salaryBreakdown = staffMembers.map(s => ({
+    id: s.id,
+    name: s.name,
+    designation: s.designation,
+    department: s.department,
+    monthly_salary: s.salary || 0,
+    annual_cost: (s.salary || 0) * 12,
+  })).sort((a, b) => b.monthly_salary - a.monthly_salary);
+
+  // Other expense breakdown by category
+  const yearOtherExpenses = db.other_expenses
+    .filter(e => e.school_id === schoolId && e.month?.startsWith(String(year)));
+  const otherByCategory = {};
+  yearOtherExpenses.forEach(e => {
+    otherByCategory[e.category] = (otherByCategory[e.category] || 0) + e.amount;
+  });
+
+  res.json({
+    year,
+    summary: {
+      total_income: totalIncome,
+      total_salary_expense: totalSalary,
+      total_other_expense: totalOther,
+      total_expenses: totalExpenses,
+      net_profit: netProfit,
+      profit_margin: totalIncome > 0 ? parseFloat(((netProfit / totalIncome) * 100).toFixed(1)) : 0,
+      monthly_salary_cost: monthlySalaryExpense,
+      total_staff: staffMembers.length,
+    },
+    monthly,
+    income_by_fee_type: Object.entries(incomeByFeeType).map(([name, amount]) => ({ name, amount })),
+    income_by_method: Object.entries(incomeByMethod).map(([method, amount]) => ({ method, amount })),
+    salary_breakdown: salaryBreakdown,
+    other_by_category: Object.entries(otherByCategory).map(([category, amount]) => ({ category, amount })),
+  });
+});
+
+// GET /api/admin/finance/expenses?year=2025&month=01
+router.get('/finance/expenses', (req, res) => {
+  const schoolId = req.user.school_id;
+  const { year, month } = req.query;
+  let expenses = db.other_expenses.filter(e => e.school_id === schoolId);
+  if (year && month) {
+    const key = `${year}-${String(month).padStart(2, '0')}`;
+    expenses = expenses.filter(e => e.month === key);
+  } else if (year) {
+    expenses = expenses.filter(e => e.month?.startsWith(String(year)));
+  }
+  res.json(expenses.sort((a, b) => b.date.localeCompare(a.date)));
+});
+
+// POST /api/admin/finance/expenses
+router.post('/finance/expenses', (req, res) => {
+  const schoolId = req.user.school_id;
+  const { category, description, amount, date } = req.body;
+  if (!category || !amount || !date) return res.status(400).json({ error: 'category, amount and date are required' });
+  const month = date.substring(0, 7); // YYYY-MM
+  const newExpense = {
+    id: uuidv4(),
+    school_id: schoolId,
+    category,
+    description: description || '',
+    amount: Number(amount),
+    date,
+    month,
+    created_at: new Date().toISOString(),
+  };
+  db.other_expenses.push(newExpense);
+  res.status(201).json(newExpense);
+});
+
+// DELETE /api/admin/finance/expenses/:id
+router.delete('/finance/expenses/:id', (req, res) => {
+  const idx = db.other_expenses.findIndex(e => e.id === req.params.id && e.school_id === req.user.school_id);
+  if (idx === -1) return res.status(404).json({ error: 'Expense not found' });
+  db.other_expenses.splice(idx, 1);
+  res.json({ success: true });
+});
+
 export default router;
