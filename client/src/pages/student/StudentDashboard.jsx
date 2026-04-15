@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import api from '../../utils/api';
 import { GraduationCap, TrendingUp, DollarSign, Calendar, Award, BookOpen, Clock, Phone } from 'lucide-react';
+import { SkDashboard } from '../../components/Skeleton';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
 const COLORS = ['#10b981', '#ef4444', '#f59e0b'];
@@ -14,8 +15,8 @@ export default function StudentDashboard() {
     api.get('/student/dashboard').then(res => { setData(res.data); setLoading(false); }).catch(() => setLoading(false));
   }, []);
 
-  if (loading) return <Layout title="Dashboard"><div className="empty-state">Loading...</div></Layout>;
-  if (!data) return <Layout title="Dashboard"><div className="empty-state">Failed to load</div></Layout>;
+  if (loading) return <Layout title="Student Dashboard"><SkDashboard statCount={4} tableRows={4} /></Layout>;
+  if (!data) return <Layout title="Student Dashboard"><div className="empty-state">Failed to load dashboard data.</div></Layout>;
 
   const attendancePieData = [
     { name: 'Present', value: data.attendance.present },

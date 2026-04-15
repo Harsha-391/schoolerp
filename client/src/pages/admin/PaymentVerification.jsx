@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import api from '../../utils/api';
 import { CheckCircle, XCircle, Clock, Eye, X, AlertCircle } from 'lucide-react';
+import { SkManagementPage } from '../../components/Skeleton';
 
 export default function PaymentVerification() {
   const [tab, setTab] = useState('pending');
@@ -9,12 +10,13 @@ export default function PaymentVerification() {
   const [all, setAll] = useState([]);
   const [showDetail, setShowDetail] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [loading, setLoading] = useState(true);
 
-  const loadData = () => {
-    api.get('/payments/admin/pending').then(r => setPending(r.data));
-    api.get('/payments/admin/all').then(r => setAll(r.data));
-  };
-  useEffect(() => { loadData(); }, []);
+  const loadData = () => Promise.all([
+    api.get('/payments/admin/pending').then(r => setPending(r.data)),
+    api.get('/payments/admin/all').then(r => setAll(r.data)),
+  ]);
+  useEffect(() => { loadData().finally(() => setLoading(false)); }, []);
 
   const handleVerify = async (id, status) => {
     await api.put(`/payments/admin/verify/${id}`, { status, reject_reason: rejectReason });
@@ -24,6 +26,8 @@ export default function PaymentVerification() {
   };
 
   const displayList = tab === 'pending' ? pending : all;
+
+  if (loading) return <Layout title="Payment Verification"><SkManagementPage cols={6} rows={7} /></Layout>;
 
   return (
     <Layout title="Payment Verification" subtitle="Verify student payments">

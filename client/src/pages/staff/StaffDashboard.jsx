@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import api from '../../utils/api';
 import { Clock, BookOpen, Users, QrCode, FileText, Calendar, TrendingUp, GraduationCap } from 'lucide-react';
+import { SkDashboard } from '../../components/Skeleton';
 
 export default function StaffDashboard() {
   const [data, setData] = useState(null);
@@ -11,8 +12,8 @@ export default function StaffDashboard() {
     api.get('/staff/dashboard').then(res => { setData(res.data); setLoading(false); }).catch(() => setLoading(false));
   }, []);
 
-  if (loading) return <Layout title="Dashboard"><div className="empty-state">Loading...</div></Layout>;
-  if (!data) return <Layout title="Dashboard"><div className="empty-state">Failed to load</div></Layout>;
+  if (loading) return <Layout title="Teacher Dashboard"><SkDashboard statCount={4} tableRows={4} /></Layout>;
+  if (!data) return <Layout title="Teacher Dashboard"><div className="empty-state">Failed to load dashboard data.</div></Layout>;
 
   return (
     <Layout title="Teacher Dashboard" subtitle={`Welcome, ${data.staff?.name}`}>

@@ -6,6 +6,7 @@ import {
   Building2, Smartphone, Banknote, FileCheck, AlertCircle,
   IndianRupee, ChevronRight, Send, XCircle
 } from 'lucide-react';
+import { SkStatCards, SkTable, SkPageHeader } from '../../components/Skeleton';
 
 export default function MyFees() {
   const [data, setData] = useState(null);
@@ -60,7 +61,13 @@ export default function MyFees() {
     setSubmitting(false);
   };
 
-  if (!data) return <Layout title="My Fees"><div className="empty-state">Loading...</div></Layout>;
+  if (!data) return (
+    <Layout title="My Fees">
+      <SkPageHeader hasButton={false} />
+      <SkStatCards count={2} />
+      <SkTable rows={5} cols={4} />
+    </Layout>
+  );
 
   const pendingRequests = myRequests.filter(r => r.status === 'pending');
   const METHOD_ICONS = {

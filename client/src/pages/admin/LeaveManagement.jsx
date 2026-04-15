@@ -2,16 +2,20 @@ import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import api from '../../utils/api';
 import { Check, X, Clock } from 'lucide-react';
+import { SkManagementPage } from '../../components/Skeleton';
 
 export default function LeaveManagement() {
   const [leaves, setLeaves] = useState([]);
+  const [loading, setLoading] = useState(true);
   const loadLeaves = () => api.get('/admin/leaves').then(res => setLeaves(res.data));
-  useEffect(() => { loadLeaves(); }, []);
+  useEffect(() => { loadLeaves().finally(() => setLoading(false)); }, []);
 
   const updateStatus = async (id, status) => {
     await api.put(`/admin/leaves/${id}`, { status });
     loadLeaves();
   };
+
+  if (loading) return <Layout title="Leave Requests"><SkManagementPage cols={8} rows={6} /></Layout>;
 
   return (
     <Layout title="Leave Requests" subtitle="Staff leave management">

@@ -2,8 +2,12 @@ import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
 dotenv.config();
 
+// Strip ssl-mode from URI — mysql2 doesn't understand that param; we set ssl explicitly below
+const dbUri = (process.env.DB_URL || '').replace(/[?&]ssl-mode=[^&]*/i, '').replace(/\?$/, '');
+
 const pool = mysql.createPool({
-  uri: process.env.DB_URL,
+  uri: dbUri,
+  ssl: { rejectUnauthorized: false }, // required for Aiven / cloud MySQL
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,

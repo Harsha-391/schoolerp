@@ -30,10 +30,14 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Identifier and password are required' });
     }
 
-    // Try by email first, then by mobile_number
+    // Try by email first, then by mobile_number (column added in migration)
     let [[user]] = await db.query('SELECT * FROM users WHERE email = ?', [identifier]);
     if (!user) {
-      [[user]] = await db.query('SELECT * FROM users WHERE mobile_number = ?', [identifier]);
+      try {
+        [[user]] = await db.query('SELECT * FROM users WHERE mobile_number = ?', [identifier]);
+      } catch (_) {
+        // mobile_number column not yet migrated — ignore
+      }
     }
     if (!user) return res.status(401).json({ error: 'Invalid credentials' });
 
@@ -41,7 +45,8 @@ router.post('/login', async (req, res) => {
     if (!isMatch) return res.status(401).json({ error: 'Invalid credentials' });
 
     // First-time login — require password change before issuing token
-    if (!user.is_password_changed) {
+    // is_password_changed may be null/undefined on unmigrated DBs — treat as already changed
+    if (user.is_password_changed === 0) {
       return res.json({
         requiresPasswordChange: true,
         userId: user.id,

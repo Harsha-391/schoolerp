@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import api from '../../utils/api';
 import { Clock } from 'lucide-react';
+import { SkBox, SkLine } from '../../components/Skeleton';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 export default function MySchedule() {
   const [schedule, setSchedule] = useState({});
-  useEffect(() => { api.get('/staff/schedule').then(res => setSchedule(res.data)); }, []);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => { api.get('/staff/schedule').then(res => setSchedule(res.data)).finally(() => setLoading(false)); }, []);
 
   const allPeriods = [];
   Object.values(schedule).forEach(daySchedule => {
@@ -18,6 +20,19 @@ export default function MySchedule() {
     });
   });
   allPeriods.sort((a, b) => a.period - b.period);
+
+  if (loading) return (
+    <Layout title="My Schedule" subtitle="Weekly timetable">
+      <div className="page-header" style={{ marginBottom: '24px' }}>
+        <SkLine w={160} size="xl" />
+      </div>
+      <div className="card">
+        <div style={{ padding: '16px 20px', overflowX: 'auto' }}>
+          <SkBox w="100%" h={300} radius="8px" />
+        </div>
+      </div>
+    </Layout>
+  );
 
   return (
     <Layout title="My Schedule" subtitle="Weekly timetable">

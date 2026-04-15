@@ -1,13 +1,37 @@
 import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import api from '../../utils/api';
+import { SkBox, SkLine, SkCircle } from '../../components/Skeleton';
 import { User, GraduationCap, Phone, MapPin, Calendar, Droplets } from 'lucide-react';
 
 export default function MyProfile() {
   const [profile, setProfile] = useState(null);
   useEffect(() => { api.get('/student/profile').then(res => setProfile(res.data)); }, []);
 
-  if (!profile) return <Layout title="My Profile"><div className="empty-state">Loading...</div></Layout>;
+  if (!profile) return (
+    <Layout title="My Profile">
+      <div style={{ maxWidth: '640px' }}>
+        <div className="card" style={{ marginBottom: '20px', padding: '24px' }}>
+          <SkBox w="100%" h={80} style={{ borderRadius: '12px 12px 0 0', marginBottom: '-20px' }} />
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '16px', marginBottom: '12px' }}>
+            <SkCircle size={72} />
+            <div style={{ flex: 1, paddingBottom: '4px' }}>
+              <SkLine w={180} size="lg" style={{ marginBottom: '6px' }} />
+              <SkLine w={120} size="sm" />
+            </div>
+          </div>
+        </div>
+        <div className="card" style={{ padding: '20px' }}>
+          {[1,2,3,4,5,6].map(i => (
+            <div key={i} style={{ display: 'flex', gap: '16px', padding: '10px 0', borderBottom: '1px solid var(--border-color)' }}>
+              <SkLine w={100} size="sm" style={{ flexShrink: 0 }} />
+              <SkLine w="60%" size="sm" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </Layout>
+  );
 
   return (
     <Layout title="My Profile" subtitle="Student information">

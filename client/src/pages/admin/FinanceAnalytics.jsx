@@ -4,6 +4,7 @@ import api from '../../utils/api';
 import {
   TrendingUp, TrendingDown, DollarSign, Users, Plus, X, Trash2, AlertCircle,
 } from 'lucide-react';
+import { SkAnalyticsPage } from '../../components/Skeleton';
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell, Legend, BarChart,
@@ -94,7 +95,7 @@ export default function FinanceAnalytics() {
     load();
   };
 
-  if (loading) return <Layout title="Finance Analytics"><div className="empty-state">Loading...</div></Layout>;
+  if (loading) return <Layout title="Finance Analytics"><SkAnalyticsPage /></Layout>;
   if (!data) return <Layout title="Finance Analytics"><div className="empty-state">Failed to load</div></Layout>;
 
   const { summary, monthly, income_by_fee_type, income_by_method, salary_breakdown, other_by_category } = data;

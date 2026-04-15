@@ -2,14 +2,21 @@ import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import api from '../../utils/api';
 import { Users, Phone, GraduationCap, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { SkManagementPage } from '../../components/Skeleton';
 
 export default function MyClasses() {
   const [classes, setClasses] = useState([]);
   const [selectedClass, setSelectedClass] = useState(null);
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
   const [attendanceMap, setAttendanceMap] = useState({});
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => { api.get('/staff/my-classes').then(res => { setClasses(res.data); if (res.data.length > 0) setSelectedClass(res.data[0]); }); }, []);
+  useEffect(() => {
+    api.get('/staff/my-classes').then(res => {
+      setClasses(res.data);
+      if (res.data.length > 0) setSelectedClass(res.data[0]);
+    }).finally(() => setLoading(false));
+  }, []);
 
   const handleMark = (studentId, status) => {
     setAttendanceMap(prev => ({ ...prev, [studentId]: status }));
@@ -29,6 +36,8 @@ export default function MyClasses() {
     selectedClass.students.forEach(s => { map[s.id] = status; });
     setAttendanceMap(map);
   };
+
+  if (loading) return <Layout title="My Classes"><SkManagementPage cols={5} rows={8} /></Layout>;
 
   return (
     <Layout title="My Classes" subtitle="Manage assigned classes">

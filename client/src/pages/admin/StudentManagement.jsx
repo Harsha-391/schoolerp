@@ -1,27 +1,55 @@
 import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import api from '../../utils/api';
-import { Plus, X, Eye, GraduationCap, Phone, User } from 'lucide-react';
+import IDCard from '../../components/IDCard';
+import { useAuth } from '../../context/AuthContext';
+import { Plus, X, Eye, GraduationCap, Phone, CreditCard, Upload } from 'lucide-react';
+import { SkManagementPage } from '../../components/Skeleton';
+
+function compressImage(file, maxWidth = 300) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const scale = Math.min(1, maxWidth / img.width);
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.75));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function StudentManagement() {
+  const { school } = useAuth();
   const [students, setStudents] = useState([]);
   const [grades, setGrades] = useState([]);
   const [selectedGrade, setSelectedGrade] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [showProfile, setShowProfile] = useState(null);
+  const [idCardTarget, setIdCardTarget] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [avatarPreview, setAvatarPreview] = useState('');
   const [form, setForm] = useState({
     name: '', grade_id: '', section_id: '', father_name: '', mother_name: '',
-    father_phone: '', mother_phone: '', address: '', dob: '', gender: '', blood_group: '', email: '',
+    father_phone: '', mother_phone: '', address: '', dob: '', gender: '', blood_group: '', email: '', avatar: '',
   });
 
   useEffect(() => {
-    api.get('/admin/grades').then(res => setGrades(res.data));
-    loadStudents();
+    Promise.all([
+      api.get('/admin/grades').then(res => setGrades(res.data)),
+      loadStudents(),
+    ]).finally(() => setLoading(false));
   }, []);
 
   const loadStudents = (gradeId) => {
     const params = gradeId ? `?grade_id=${gradeId}` : '';
-    api.get(`/admin/students${params}`).then(res => setStudents(res.data));
+    return api.get(`/admin/students${params}`).then(res => setStudents(res.data));
   };
 
   const handleGradeFilter = (gradeId) => {
@@ -29,16 +57,34 @@ export default function StudentManagement() {
     loadStudents(gradeId);
   };
 
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const dataUrl = await compressImage(file);
+    setAvatarPreview(dataUrl);
+    setForm(prev => ({ ...prev, avatar: dataUrl }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    await api.post('/admin/students', form);
+    const res = await api.post('/admin/students', form);
+    if (form.avatar) {
+      await api.put(`/admin/students/${res.data.id}/avatar`, { avatar: form.avatar }).catch(() => {});
+    }
     setShowModal(false);
+    setAvatarPreview('');
+    setForm({
+      name: '', grade_id: '', section_id: '', father_name: '', mother_name: '',
+      father_phone: '', mother_phone: '', address: '', dob: '', gender: '', blood_group: '', email: '', avatar: '',
+    });
     loadStudents(selectedGrade);
   };
 
   const viewProfile = (studentId) => {
     api.get(`/admin/students/${studentId}`).then(res => setShowProfile(res.data));
   };
+
+  if (loading) return <Layout title="Student Management"><SkManagementPage cols={8} rows={8} hasSearch /></Layout>;
 
   return (
     <Layout title="Student Management" subtitle="Manage all students">
@@ -78,9 +124,10 @@ export default function StudentManagement() {
                 <tr key={s.id}>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <div className="user-avatar" style={{ width: '32px', height: '32px', fontSize: '12px', borderRadius: '8px' }}>
-                        {s.name?.charAt(0)}
-                      </div>
+                      {s.avatar
+                        ? <img src={s.avatar} alt={s.name} style={{ width: '32px', height: '32px', borderRadius: '8px', objectFit: 'cover', flexShrink: 0 }} />
+                        : <div className="user-avatar" style={{ width: '32px', height: '32px', fontSize: '12px', borderRadius: '8px' }}>{s.name?.charAt(0)}</div>
+                      }
                       <div>
                         <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{s.name}</div>
                         <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{s.gender} · {s.blood_group}</div>
@@ -98,9 +145,14 @@ export default function StudentManagement() {
                   </td>
                   <td style={{ color: 'var(--success)', fontWeight: 600 }}>₹{s.total_fees_paid?.toLocaleString()}</td>
                   <td>
-                    <button className="btn btn-sm btn-secondary" onClick={() => viewProfile(s.id)}>
-                      <Eye size={13} /> Profile
-                    </button>
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      <button className="btn btn-sm btn-secondary" onClick={() => viewProfile(s.id)}>
+                        <Eye size={13} /> Profile
+                      </button>
+                      <button className="btn btn-sm btn-secondary" onClick={() => setIdCardTarget(s)} title="ID Card">
+                        <CreditCard size={13} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -120,7 +172,10 @@ export default function StudentManagement() {
             <div className="modal-body">
               <div className="profile-card" style={{ border: 'none' }}>
                 <div className="profile-cover">
-                  <div className="profile-avatar-lg">{showProfile.name?.charAt(0)}</div>
+                  {showProfile.avatar
+                    ? <img src={showProfile.avatar} alt={showProfile.name} style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover', border: '3px solid rgba(255,255,255,0.3)' }} />
+                    : <div className="profile-avatar-lg">{showProfile.name?.charAt(0)}</div>
+                  }
                 </div>
                 <div className="profile-info">
                   <div className="profile-name">{showProfile.name}</div>
@@ -175,6 +230,13 @@ export default function StudentManagement() {
                   </table>
                 </div>
               )}
+
+              <div style={{ marginTop: '16px' }}>
+                <button className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                  onClick={() => { setIdCardTarget(showProfile); setShowProfile(null); }}>
+                  <CreditCard size={14} /> Generate ID Card
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -190,6 +252,27 @@ export default function StudentManagement() {
             </div>
             <form onSubmit={handleSubmit}>
               <div className="modal-body">
+                {/* Photo upload */}
+                <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
+                  <div style={{
+                    width: '72px', height: '72px', borderRadius: '14px', flexShrink: 0,
+                    background: avatarPreview ? 'none' : 'rgba(99,102,241,0.1)',
+                    border: '2px dashed var(--border-color)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    overflow: 'hidden',
+                  }}>
+                    {avatarPreview
+                      ? <img src={avatarPreview} alt="preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : <Upload size={22} style={{ color: 'var(--text-muted)' }} />
+                    }
+                  </div>
+                  <div>
+                    <label className="form-label">Student Photo (optional)</label>
+                    <input type="file" accept="image/*" onChange={handleAvatarChange} style={{ fontSize: '12px', color: 'var(--text-secondary)' }} />
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}>Used on ID card</div>
+                  </div>
+                </div>
+
                 <div className="form-row">
                   <div className="form-group">
                     <label className="form-label">Student Name *</label>
@@ -203,7 +286,7 @@ export default function StudentManagement() {
                 <div className="form-row">
                   <div className="form-group">
                     <label className="form-label">Grade *</label>
-                    <select className="form-select" value={form.grade_id} onChange={e => setForm({ ...form, grade_id: e.target.value })} required>
+                    <select className="form-select" value={form.grade_id} onChange={e => setForm({ ...form, grade_id: e.target.value, section_id: '' })} required>
                       <option value="">Select grade</option>
                       {grades.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                     </select>
@@ -266,6 +349,16 @@ export default function StudentManagement() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* ID Card Modal */}
+      {idCardTarget && (
+        <IDCard
+          person={idCardTarget}
+          type="student"
+          school={school}
+          onClose={() => setIdCardTarget(null)}
+        />
       )}
     </Layout>
   );

@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import api from '../../utils/api';
+import { SkManagementPage } from '../../components/Skeleton';
 import { Award } from 'lucide-react';
 
 export default function MyMarks() {
   const [data, setData] = useState(null);
   useEffect(() => { api.get('/student/marks').then(res => setData(res.data)); }, []);
 
-  if (!data) return <Layout title="My Marks"><div className="empty-state">Loading...</div></Layout>;
+  if (!data) return <Layout title="My Marks"><SkManagementPage cols={4} rows={6} /></Layout>;
 
   return (
     <Layout title="My Marks" subtitle="Exam results and grades">

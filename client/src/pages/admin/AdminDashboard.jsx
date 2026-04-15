@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import api from '../../utils/api';
 import { GraduationCap, Users, DollarSign, TrendingUp, Calendar, Clock, BookOpen } from 'lucide-react';
+import { SkDashboard } from '../../components/Skeleton';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 const COLORS = ['#6366f1', '#8b5cf6', '#a78bfa', '#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
@@ -14,8 +15,8 @@ export default function AdminDashboard() {
     api.get('/admin/dashboard').then(res => { setData(res.data); setLoading(false); }).catch(() => setLoading(false));
   }, []);
 
-  if (loading) return <Layout title="Dashboard"><div className="empty-state">Loading...</div></Layout>;
-  if (!data) return <Layout title="Dashboard"><div className="empty-state">Failed to load</div></Layout>;
+  if (loading) return <Layout title="Dashboard"><SkDashboard statCount={4} tableRows={5} /></Layout>;
+  if (!data) return <Layout title="Dashboard"><div className="empty-state">Failed to load dashboard data.</div></Layout>;
 
   return (
     <Layout title="School Dashboard" subtitle={data.school?.name}>

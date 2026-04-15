@@ -176,11 +176,36 @@ router.put('/schools/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/developer/schools/:id
+// DELETE /api/developer/schools/:id — permanently deletes the school and ALL its data
 router.delete('/schools/:id', async (req, res) => {
+  const id = req.params.id;
   try {
-    await db.query('UPDATE schools SET is_active = 0 WHERE id = ?', [req.params.id]);
-    res.json({ message: 'School deactivated' });
+    const [[school]] = await db.query('SELECT id, name FROM schools WHERE id = ?', [id]);
+    if (!school) return res.status(404).json({ error: 'School not found' });
+
+    // Delete in dependency order (no FK constraints, but keep it clean)
+    await db.query('DELETE FROM marks                   WHERE school_id = ?', [id]);
+    await db.query('DELETE FROM attendance_students     WHERE school_id = ?', [id]);
+    await db.query('DELETE FROM attendance_staff        WHERE school_id = ?', [id]);
+    await db.query('DELETE FROM fee_payments            WHERE school_id = ?', [id]);
+    await db.query('DELETE FROM payment_requests        WHERE school_id = ?', [id]);
+    await db.query('DELETE FROM other_expenses          WHERE school_id = ?', [id]);
+    await db.query('DELETE FROM leaves                  WHERE school_id = ?', [id]);
+    await db.query('DELETE FROM schedules               WHERE school_id = ?', [id]);
+    await db.query('DELETE FROM class_teacher_assignments WHERE school_id = ?', [id]);
+    await db.query('DELETE FROM exams                   WHERE school_id = ?', [id]);
+    await db.query('DELETE FROM fees_structure          WHERE school_id = ?', [id]);
+    await db.query('DELETE FROM school_payment_config   WHERE school_id = ?', [id]);
+    await db.query('DELETE FROM holidays                WHERE school_id = ?', [id]);
+    await db.query('DELETE FROM sections                WHERE school_id = ?', [id]);
+    await db.query('DELETE FROM grades                  WHERE school_id = ?', [id]);
+    await db.query('DELETE FROM subjects                WHERE school_id = ?', [id]);
+    await db.query('DELETE FROM students                WHERE school_id = ?', [id]);
+    await db.query('DELETE FROM staff                   WHERE school_id = ?', [id]);
+    await db.query('DELETE FROM users                   WHERE school_id = ?', [id]);
+    await db.query('DELETE FROM schools                 WHERE id = ?',        [id]);
+
+    res.json({ message: `School "${school.name}" and all its data have been permanently deleted.` });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });

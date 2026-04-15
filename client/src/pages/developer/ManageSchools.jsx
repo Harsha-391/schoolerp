@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import api from '../../utils/api';
 import { Plus, School, Users, GraduationCap, MapPin, Globe, X, Edit, Trash2, Eye, ExternalLink } from 'lucide-react';
+import { SkManagementPage } from '../../components/Skeleton';
 import { useNavigate } from 'react-router-dom';
 import { getSchoolUrl } from '../../utils/subdomain';
 
@@ -9,6 +10,9 @@ export default function ManageSchools() {
   const [schools, setSchools] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null); // school object to confirm deletion
+  const [deleteInput, setDeleteInput] = useState('');
+  const [deleting, setDeleting] = useState(false);
   const initialForm = {
     name: '', address: '', city: '', state: '', phone: '', email: '',
     subdomain: '', rate_per_student: 250, payment_methods: ['online', 'cash'], razorpay_account_id: '',
@@ -17,11 +21,11 @@ export default function ManageSchools() {
   const [form, setForm] = useState(initialForm);
   const navigate = useNavigate();
 
-  const loadSchools = () => {
-    api.get('/developer/schools').then(res => setSchools(res.data));
-  };
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => { loadSchools(); }, []);
+  const loadSchools = () => api.get('/developer/schools').then(res => setSchools(res.data));
+
+  useEffect(() => { loadSchools().finally(() => setLoading(false)); }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -40,6 +44,21 @@ export default function ManageSchools() {
     }
   };
 
+  const handleDelete = async () => {
+    if (deleteInput !== deleteTarget.name) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/developer/schools/${deleteTarget.id}`);
+      setDeleteTarget(null);
+      setDeleteInput('');
+      loadSchools();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to delete school');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const openEditModal = (school) => {
     setForm({
       ...initialForm,
@@ -51,6 +70,8 @@ export default function ManageSchools() {
     setEditingId(school.id);
     setShowModal(true);
   };
+
+  if (loading) return <Layout title="Manage Schools"><SkManagementPage cols={7} rows={6} hasSearch={false} /></Layout>;
 
   return (
     <Layout title="Manage Schools" subtitle="Add and manage schools on the platform">
@@ -123,6 +144,10 @@ export default function ManageSchools() {
                         <Eye size={13} />
                       </button>
                       <button className="btn btn-sm btn-secondary" onClick={() => openEditModal(school)}><Edit size={13} /></button>
+                      <button className="btn btn-sm" onClick={() => { setDeleteTarget(school); setDeleteInput(''); }}
+                        style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--error)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                        <Trash2 size={13} />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -208,6 +233,52 @@ export default function ManageSchools() {
                 <button type="submit" className="btn btn-primary">{editingId ? 'Save Changes' : 'Create School'}</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '440px' }}>
+            <div className="modal-header">
+              <div className="modal-title" style={{ color: 'var(--error)' }}>Delete School</div>
+              <button className="modal-close" onClick={() => setDeleteTarget(null)}><X size={16} /></button>
+            </div>
+            <div className="modal-body">
+              <div style={{
+                background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
+                borderRadius: '10px', padding: '12px 14px', marginBottom: '16px', fontSize: '13px', color: 'var(--error)',
+              }}>
+                This will permanently delete <strong>{deleteTarget.name}</strong> and erase all of its data —
+                {' '}{deleteTarget.student_count} students, {deleteTarget.staff_count} staff, all attendance,
+                fees, marks, and records. This cannot be undone.
+              </div>
+              <div className="form-group">
+                <label className="form-label">
+                  Type <strong>{deleteTarget.name}</strong> to confirm
+                </label>
+                <input
+                  className="form-input"
+                  value={deleteInput}
+                  onChange={e => setDeleteInput(e.target.value)}
+                  placeholder={deleteTarget.name}
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setDeleteTarget(null)}>Cancel</button>
+              <button
+                className="btn"
+                disabled={deleteInput !== deleteTarget.name || deleting}
+                onClick={handleDelete}
+                style={{
+                  background: deleteInput === deleteTarget.name ? 'var(--error)' : 'rgba(239,68,68,0.3)',
+                  color: '#fff', cursor: deleteInput === deleteTarget.name ? 'pointer' : 'not-allowed',
+                }}
+              >
+                {deleting ? 'Deleting…' : 'Delete Everything'}
+              </button>
+            </div>
           </div>
         </div>
       )}

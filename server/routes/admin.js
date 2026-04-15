@@ -125,6 +125,15 @@ router.put('/staff/:id', async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
+router.put('/staff/:id/avatar', async (req, res) => {
+  try {
+    const { avatar } = req.body; // base64 data URL
+    await db.query('UPDATE staff SET avatar=? WHERE id=? AND school_id=?',
+      [avatar, req.params.id, req.user.school_id]);
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
 // ── Students ───────────────────────────────────────────────────────────────────
 router.get('/students', async (req, res) => {
   try {
@@ -191,6 +200,15 @@ router.post('/students', async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
+router.put('/students/:id/avatar', async (req, res) => {
+  try {
+    const { avatar } = req.body;
+    await db.query('UPDATE students SET avatar=? WHERE id=? AND school_id=?',
+      [avatar, req.params.id, req.user.school_id]);
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
 router.get('/students/:id', async (req, res) => {
   try {
     const [[student]] = await db.query(
@@ -234,6 +252,56 @@ router.get('/grades', async (req, res) => {
       sections:      sections.filter(s => s.grade_id === g.id),
       student_count: countMap[g.id] || 0,
     })));
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+router.post('/grades', async (req, res) => {
+  try {
+    const { name, order: gradeOrder } = req.body;
+    const schoolId = req.user.school_id;
+    const id = uuidv4();
+    const [[{ maxOrder }]] = await db.query('SELECT COALESCE(MAX(`order`),0) AS maxOrder FROM grades WHERE school_id = ?', [schoolId]);
+    await db.query('INSERT INTO grades (id,school_id,name,`order`) VALUES (?,?,?,?)',
+      [id, schoolId, name, gradeOrder ?? (maxOrder + 1)]);
+    const [[row]] = await db.query('SELECT * FROM grades WHERE id = ?', [id]);
+    res.status(201).json({ ...row, sections: [], student_count: 0 });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+router.delete('/grades/:id', async (req, res) => {
+  try {
+    const [[{ cnt }]] = await db.query(
+      'SELECT COUNT(*) AS cnt FROM students WHERE grade_id = ? AND school_id = ? AND is_active = 1',
+      [req.params.id, req.user.school_id]
+    );
+    if (cnt > 0) return res.status(400).json({ error: 'Cannot delete grade with active students' });
+    await db.query('DELETE FROM sections WHERE grade_id = ? AND school_id = ?', [req.params.id, req.user.school_id]);
+    await db.query('DELETE FROM grades WHERE id = ? AND school_id = ?', [req.params.id, req.user.school_id]);
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+router.post('/grades/:id/sections', async (req, res) => {
+  try {
+    const { name } = req.body;
+    const schoolId = req.user.school_id;
+    const id = uuidv4();
+    await db.query('INSERT INTO sections (id,grade_id,school_id,name) VALUES (?,?,?,?)',
+      [id, req.params.id, schoolId, name]);
+    const [[row]] = await db.query('SELECT * FROM sections WHERE id = ?', [id]);
+    res.status(201).json(row);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+router.delete('/sections/:id', async (req, res) => {
+  try {
+    const [[{ cnt }]] = await db.query(
+      'SELECT COUNT(*) AS cnt FROM students WHERE section_id = ? AND school_id = ? AND is_active = 1',
+      [req.params.id, req.user.school_id]
+    );
+    if (cnt > 0) return res.status(400).json({ error: 'Cannot delete section with active students' });
+    await db.query('DELETE FROM sections WHERE id = ? AND school_id = ?', [req.params.id, req.user.school_id]);
+    res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
@@ -296,6 +364,14 @@ router.post('/exams', async (req, res) => {
     );
     const [[row]] = await db.query('SELECT * FROM exams WHERE id = ?', [id]);
     res.status(201).json(row);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+router.delete('/exams/:id', async (req, res) => {
+  try {
+    await db.query('DELETE FROM marks WHERE exam_id = ? AND school_id = ?', [req.params.id, req.user.school_id]);
+    await db.query('DELETE FROM exams WHERE id = ? AND school_id = ?', [req.params.id, req.user.school_id]);
+    res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 

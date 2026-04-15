@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import api from '../../utils/api';
+import { SkManagementPage } from '../../components/Skeleton';
 
 export default function MyAttendance() {
   const [data, setData] = useState(null);
   useEffect(() => { api.get('/student/attendance').then(res => setData(res.data)); }, []);
 
-  if (!data) return <Layout title="My Attendance"><div className="empty-state">Loading...</div></Layout>;
+  if (!data) return <Layout title="My Attendance"><SkManagementPage cols={3} rows={8} /></Layout>;
 
   return (
     <Layout title="My Attendance" subtitle="Attendance records">

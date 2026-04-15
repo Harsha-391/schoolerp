@@ -1,14 +1,18 @@
 import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import api from '../../utils/api';
+import { SkManagementPage } from '../../components/Skeleton';
 
 export default function StaffAttendance() {
   const [attendance, setAttendance] = useState([]);
-  useEffect(() => { api.get('/staff/my-attendance').then(res => setAttendance(res.data)); }, []);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => { api.get('/staff/my-attendance').then(res => setAttendance(res.data)).finally(() => setLoading(false)); }, []);
 
   const present = attendance.filter(a => a.status === 'present').length;
   const absent = attendance.filter(a => a.status === 'absent').length;
   const percentage = attendance.length > 0 ? ((present / attendance.length) * 100).toFixed(1) : 0;
+
+  if (loading) return <Layout title="My Attendance"><SkManagementPage cols={3} rows={8} /></Layout>;
 
   return (
     <Layout title="My Attendance" subtitle="Your attendance records">

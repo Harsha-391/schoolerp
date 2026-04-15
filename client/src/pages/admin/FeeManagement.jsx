@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import api from '../../utils/api';
 import { DollarSign, Plus, X } from 'lucide-react';
+import { SkManagementPage } from '../../components/Skeleton';
 
 export default function FeeManagement() {
   const [tab, setTab] = useState('structure');
@@ -9,12 +10,15 @@ export default function FeeManagement() {
   const [payments, setPayments] = useState([]);
   const [grades, setGrades] = useState([]);
   const [showModal, setShowModal] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ grade_id: '', name: '', amount: '', frequency: 'monthly', due_day: 10 });
 
   useEffect(() => {
-    api.get('/admin/fees/structure').then(res => setStructures(res.data));
-    api.get('/admin/fees/payments').then(res => setPayments(res.data));
-    api.get('/admin/grades').then(res => setGrades(res.data));
+    Promise.all([
+      api.get('/admin/fees/structure').then(res => setStructures(res.data)),
+      api.get('/admin/fees/payments').then(res => setPayments(res.data)),
+      api.get('/admin/grades').then(res => setGrades(res.data)),
+    ]).finally(() => setLoading(false));
   }, []);
 
   const handleSubmit = async (e) => {
@@ -23,6 +27,8 @@ export default function FeeManagement() {
     setShowModal(false);
     api.get('/admin/fees/structure').then(res => setStructures(res.data));
   };
+
+  if (loading) return <Layout title="Fee Management"><SkManagementPage cols={5} rows={7} hasSearch /></Layout>;
 
   return (
     <Layout title="Fee Management" subtitle="Fee structures and payment tracking">

@@ -1,23 +1,71 @@
 import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import api from '../../utils/api';
-import { Plus, X, Users, Phone, Mail, Briefcase, DollarSign } from 'lucide-react';
+import IDCard from '../../components/IDCard';
+import { useAuth } from '../../context/AuthContext';
+import { Plus, X, Mail, Phone, Briefcase, CreditCard, Upload } from 'lucide-react';
+import { SkManagementPage } from '../../components/Skeleton';
+
+function compressImage(file, maxWidth = 300) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const scale = Math.min(1, maxWidth / img.width);
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.75));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function StaffManagement() {
+  const { school } = useAuth();
   const [staff, setStaff] = useState([]);
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '', phone: '', designation: 'Teacher', department: '', salary: '' });
+  const [idCardTarget, setIdCardTarget] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState({ name: '', email: '', phone: '', designation: 'Teacher', department: '', salary: '', avatar: '' });
+  const [avatarPreview, setAvatarPreview] = useState('');
 
   const loadStaff = () => api.get('/admin/staff').then(res => setStaff(res.data));
-  useEffect(() => { loadStaff(); }, []);
+
+  useEffect(() => { loadStaff().finally(() => setLoading(false)); }, []);
+
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const dataUrl = await compressImage(file);
+    setAvatarPreview(dataUrl);
+    setForm(prev => ({ ...prev, avatar: dataUrl }));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    await api.post('/admin/staff', { ...form, salary: Number(form.salary) });
+    const res = await api.post('/admin/staff', { ...form, salary: Number(form.salary) });
+    // If photo was set, save it immediately after create
+    if (form.avatar) {
+      await api.put(`/admin/staff/${res.data.id}/avatar`, { avatar: form.avatar }).catch(() => {});
+    }
     setShowModal(false);
-    setForm({ name: '', email: '', phone: '', designation: 'Teacher', department: '', salary: '' });
+    setForm({ name: '', email: '', phone: '', designation: 'Teacher', department: '', salary: '', avatar: '' });
+    setAvatarPreview('');
     loadStaff();
   };
+
+  const openAddModal = () => {
+    setForm({ name: '', email: '', phone: '', designation: 'Teacher', department: '', salary: '', avatar: '' });
+    setAvatarPreview('');
+    setShowModal(true);
+  };
+
+  if (loading) return <Layout title="Staff Management"><SkManagementPage cards cardCount={6} /></Layout>;
 
   return (
     <Layout title="Staff Management" subtitle="Manage teachers and staff">
@@ -26,20 +74,21 @@ export default function StaffManagement() {
           <h1 className="page-title">Staff Members</h1>
           <p className="page-subtitle">{staff.length} staff members</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+        <button className="btn btn-primary" onClick={openAddModal}>
           <Plus size={16} /> Add Staff
         </button>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '16px' }}>
         {staff.map(s => (
-          <div className="card" key={s.id} style={{ transition: 'transform 0.2s' }}>
+          <div className="card" key={s.id}>
             <div className="card-body" style={{ padding: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
-                <div className="user-avatar" style={{ width: '48px', height: '48px', fontSize: '18px', borderRadius: '14px' }}>
-                  {s.name?.charAt(0)}
-                </div>
-                <div>
+                {s.avatar
+                  ? <img src={s.avatar} alt={s.name} style={{ width: '48px', height: '48px', borderRadius: '14px', objectFit: 'cover', flexShrink: 0 }} />
+                  : <div className="user-avatar" style={{ width: '48px', height: '48px', fontSize: '18px', borderRadius: '14px' }}>{s.name?.charAt(0)}</div>
+                }
+                <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 700, fontSize: '15px' }}>{s.name}</div>
                   <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{s.designation} · {s.department}</div>
                 </div>
@@ -82,11 +131,22 @@ export default function StaffManagement() {
                   </span>
                 </div>
               )}
+
+              <div style={{ marginTop: '12px' }}>
+                <button
+                  className="btn btn-sm btn-secondary"
+                  style={{ width: '100%', justifyContent: 'center' }}
+                  onClick={() => setIdCardTarget(s)}
+                >
+                  <CreditCard size={13} /> View ID Card
+                </button>
+              </div>
             </div>
           </div>
         ))}
       </div>
 
+      {/* Add Staff Modal */}
       {showModal && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
@@ -96,6 +156,27 @@ export default function StaffManagement() {
             </div>
             <form onSubmit={handleSubmit}>
               <div className="modal-body">
+                {/* Photo upload */}
+                <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <div style={{
+                    width: '72px', height: '72px', borderRadius: '14px', flexShrink: 0,
+                    background: avatarPreview ? 'none' : 'rgba(99,102,241,0.1)',
+                    border: '2px dashed var(--border-color)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    overflow: 'hidden',
+                  }}>
+                    {avatarPreview
+                      ? <img src={avatarPreview} alt="preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : <Upload size={22} style={{ color: 'var(--text-muted)' }} />
+                    }
+                  </div>
+                  <div>
+                    <label className="form-label">Photo (optional)</label>
+                    <input type="file" accept="image/*" onChange={handleAvatarChange} style={{ fontSize: '12px', color: 'var(--text-secondary)' }} />
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}>Used on ID card</div>
+                  </div>
+                </div>
+
                 <div className="form-group">
                   <label className="form-label">Full Name *</label>
                   <input className="form-input" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
@@ -139,6 +220,16 @@ export default function StaffManagement() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* ID Card Modal */}
+      {idCardTarget && (
+        <IDCard
+          person={idCardTarget}
+          type="staff"
+          school={school}
+          onClose={() => setIdCardTarget(null)}
+        />
       )}
     </Layout>
   );

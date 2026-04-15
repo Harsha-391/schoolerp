@@ -310,9 +310,11 @@ async function createTables() {
   const alters = [
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS mobile_number VARCHAR(15) UNIQUE",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_password_changed TINYINT(1) DEFAULT 1",
+    "ALTER TABLE staff MODIFY COLUMN avatar MEDIUMTEXT",
+    "ALTER TABLE students MODIFY COLUMN avatar MEDIUMTEXT",
   ];
   for (const sql of alters) {
-    try { await pool.query(sql); } catch (_) { /* column already exists */ }
+    try { await pool.query(sql); } catch (_) { /* column already exists or no-op */ }
   }
 
   console.log('✅ All tables created');
