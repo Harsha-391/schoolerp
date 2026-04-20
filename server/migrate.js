@@ -11,62 +11,62 @@ import bcryptjs from 'bcryptjs';
 // ─── Fixed seed IDs (INSERT IGNORE makes re-runs idempotent) ─────────────────
 const ID = {
   // Users
-  U_DEV:       'seed-usr-dev001',
-  U_ADM_DPS:   'seed-usr-adm001',
-  U_ADM_XAV:   'seed-usr-adm002',
+  U_DEV: 'seed-usr-dev001',
+  U_ADM_DPS: 'seed-usr-adm001',
+  U_ADM_XAV: 'seed-usr-adm002',
   // Schools
-  S_DPS:       'seed-scl-dps001',
-  S_XAV:       'seed-scl-xav001',
+  S_DPS: 'seed-scl-dps001',
+  S_XAV: 'seed-scl-xav001',
   // Staff (DPS) — staff record + user record
-  ST: i => `seed-stf-${String(i).padStart(5,'0')}`,
-  US: i => `seed-ust-${String(i).padStart(5,'0')}`,
+  ST: i => `seed-stf-${String(i).padStart(5, '0')}`,
+  US: i => `seed-ust-${String(i).padStart(5, '0')}`,
   // Grades — per school, by index (0=Nursery … 12=10th … 14=12th)
-  GD: (school, i) => `seed-grd-${school}-${String(i).padStart(2,'0')}`,
+  GD: (school, i) => `seed-grd-${school}-${String(i).padStart(2, '0')}`,
   // Sections — per school, grade index, letter
-  SC: (school, gi, l) => `seed-sec-${school}-${String(gi).padStart(2,'0')}${l}`,
+  SC: (school, gi, l) => `seed-sec-${school}-${String(gi).padStart(2, '0')}${l}`,
   // Subjects — per school, by index
-  SB: (school, i) => `seed-sub-${school}-${String(i).padStart(3,'0')}`,
+  SB: (school, i) => `seed-sub-${school}-${String(i).padStart(3, '0')}`,
   // Students + their user accounts
-  STU: i => `seed-stu-${String(i).padStart(6,'0')}`,
-  USTU: i => `seed-ustu-${String(i).padStart(5,'0')}`,
+  STU: i => `seed-stu-${String(i).padStart(6, '0')}`,
+  USTU: i => `seed-ustu-${String(i).padStart(5, '0')}`,
   // Payment configs
-  PC_DPS_UPI:  'seed-pc-dpsupi',
+  PC_DPS_UPI: 'seed-pc-dpsupi',
   PC_DPS_BANK: 'seed-pc-dpsbk',
   PC_DPS_CASH: 'seed-pc-dpsca',
   PC_DPS_CHEQ: 'seed-pc-dpsch',
-  PC_XAV_UPI:  'seed-pc-xavup',
+  PC_XAV_UPI: 'seed-pc-xavup',
   PC_XAV_BANK: 'seed-pc-xavbk',
   // Fee structures
-  FS_TUIT:     'seed-fs-tuit01',
-  FS_TRNP:     'seed-fs-trnp01',
-  FS_LAB:      'seed-fs-lab001',
-  FS_ANN:      'seed-fs-ann001',
+  FS_TUIT: 'seed-fs-tuit01',
+  FS_TRNP: 'seed-fs-trnp01',
+  FS_LAB: 'seed-fs-lab001',
+  FS_ANN: 'seed-fs-ann001',
   // Exams
-  EX1:         'seed-exam-mid01',
-  EX2:         'seed-exam-fin01',
+  EX1: 'seed-exam-mid01',
+  EX2: 'seed-exam-fin01',
   // Class teacher assignment
-  CTA:         'seed-cta-00001',
+  CTA: 'seed-cta-00001',
 };
 
-const GRADE_NAMES = ['Nursery','LKG','UKG','1st','2nd','3rd','4th','5th','6th','7th','8th','9th','10th','11th','12th'];
-const SUBJECT_NAMES = ['Mathematics','English','Hindi','Science','Social Studies','Computer Science','Physical Education','Art'];
+const GRADE_NAMES = ['Nursery', 'LKG', 'UKG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'];
+const SUBJECT_NAMES = ['Mathematics', 'English', 'Hindi', 'Science', 'Social Studies', 'Computer Science', 'Physical Education', 'Art'];
 const STAFF_SEED = [
-  { name:'Anita Sharma',  designation:'Teacher',      department:'Mathematics', salary:45000, phone:'9800000001', email:'anita@dps.edu' },
-  { name:'Vikram Singh',  designation:'Teacher',      department:'Science',     salary:42000, phone:'9800000002', email:'vikram@dps.edu' },
-  { name:'Priya Patel',   designation:'Teacher',      department:'English',     salary:40000, phone:'9800000003', email:'priya@dps.edu' },
-  { name:'Suresh Gupta',  designation:'Vice Principal',department:'Administration',salary:65000,phone:'9800000004',email:'suresh@dps.edu'},
-  { name:'Meena Rao',     designation:'Teacher',      department:'Hindi',       salary:38000, phone:'9800000005', email:'meena@dps.edu' },
-  { name:'Karan Malhotra',designation:'Librarian',    department:'Library',     salary:30000, phone:'9800000006', email:'karan@dps.edu' },
+  { name: 'Anita Sharma', designation: 'Teacher', department: 'Mathematics', salary: 45000, phone: '9800000001', email: 'anita@dps.edu' },
+  { name: 'Vikram Singh', designation: 'Teacher', department: 'Science', salary: 42000, phone: '9800000002', email: 'vikram@dps.edu' },
+  { name: 'Priya Patel', designation: 'Teacher', department: 'English', salary: 40000, phone: '9800000003', email: 'priya@dps.edu' },
+  { name: 'Suresh Gupta', designation: 'Vice Principal', department: 'Administration', salary: 65000, phone: '9800000004', email: 'suresh@dps.edu' },
+  { name: 'Meena Rao', designation: 'Teacher', department: 'Hindi', salary: 38000, phone: '9800000005', email: 'meena@dps.edu' },
+  { name: 'Karan Malhotra', designation: 'Librarian', department: 'Library', salary: 30000, phone: '9800000006', email: 'karan@dps.edu' },
 ];
 const STUDENT_SEED = [
-  { name:'Aarav Mehta',  father:'Sunil Mehta',  mother:'Sunita Mehta',  fp:'9700000001', mp:'9700000002' },
-  { name:'Ishita Verma', father:'Ajay Verma',   mother:'Neha Verma',    fp:'9700000003', mp:'9700000004' },
-  { name:'Rohan Kapoor', father:'Ravi Kapoor',  mother:'Shalini Kapoor',fp:'9700000005', mp:'9700000006' },
-  { name:'Sanya Nair',   father:'Krishnan Nair',mother:'Latha Nair',    fp:'9700000007', mp:'9700000008' },
-  { name:'Dev Aggarwal', father:'Manoj Aggarwal',mother:'Rekha Aggarwal',fp:'9700000009',mp:'9700000010' },
-  { name:'Nisha Reddy',  father:'Venkat Reddy', mother:'Lakshmi Reddy', fp:'9700000011', mp:'9700000012' },
-  { name:'Arjun Desai',  father:'Himanshu Desai',mother:'Kavita Desai', fp:'9700000013', mp:'9700000014' },
-  { name:'Pooja Joshi',  father:'Raghav Joshi', mother:'Anita Joshi',   fp:'9700000015', mp:'9700000016' },
+  { name: 'Aarav Mehta', father: 'Sunil Mehta', mother: 'Sunita Mehta', fp: '9700000001', mp: '9700000002' },
+  { name: 'Ishita Verma', father: 'Ajay Verma', mother: 'Neha Verma', fp: '9700000003', mp: '9700000004' },
+  { name: 'Rohan Kapoor', father: 'Ravi Kapoor', mother: 'Shalini Kapoor', fp: '9700000005', mp: '9700000006' },
+  { name: 'Sanya Nair', father: 'Krishnan Nair', mother: 'Latha Nair', fp: '9700000007', mp: '9700000008' },
+  { name: 'Dev Aggarwal', father: 'Manoj Aggarwal', mother: 'Rekha Aggarwal', fp: '9700000009', mp: '9700000010' },
+  { name: 'Nisha Reddy', father: 'Venkat Reddy', mother: 'Lakshmi Reddy', fp: '9700000011', mp: '9700000012' },
+  { name: 'Arjun Desai', father: 'Himanshu Desai', mother: 'Kavita Desai', fp: '9700000013', mp: '9700000014' },
+  { name: 'Pooja Joshi', father: 'Raghav Joshi', mother: 'Anita Joshi', fp: '9700000015', mp: '9700000016' },
 ];
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
@@ -215,6 +215,20 @@ async function createTables() {
       total_marks DECIMAL(6,2),
       grade VARCHAR(5)
     )`,
+    `CREATE TABLE IF NOT EXISTS syllabus_units (
+      id VARCHAR(36) PRIMARY KEY,
+      school_id VARCHAR(36) NOT NULL,
+      grade_id VARCHAR(36) NOT NULL,
+      unit_number INT DEFAULT 1,
+      unit_name VARCHAR(255) NOT NULL,
+      description TEXT,
+      outcomes TEXT,
+      weightage DECIMAL(5,2) DEFAULT 0,
+      pdf_data MEDIUMTEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE CASCADE,
+      FOREIGN KEY (grade_id) REFERENCES grades(id) ON DELETE CASCADE
+    )`,
     `CREATE TABLE IF NOT EXISTS leaves (
       id VARCHAR(36) PRIMARY KEY,
       staff_id VARCHAR(36) NOT NULL,
@@ -312,6 +326,11 @@ async function createTables() {
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_password_changed TINYINT(1) DEFAULT 1",
     "ALTER TABLE staff MODIFY COLUMN avatar MEDIUMTEXT",
     "ALTER TABLE students MODIFY COLUMN avatar MEDIUMTEXT",
+    // QR attendance
+    "ALTER TABLE schools ADD COLUMN IF NOT EXISTS attendance_mode ENUM('qr_scanner','teacher_marking') DEFAULT 'teacher_marking'",
+    "ALTER TABLE attendance_students ADD COLUMN IF NOT EXISTS check_in VARCHAR(10)",
+    "ALTER TABLE attendance_students ADD COLUMN IF NOT EXISTS check_out VARCHAR(10)",
+    "ALTER TABLE exams ADD COLUMN IF NOT EXISTS unit_id VARCHAR(36)",
   ];
   for (const sql of alters) {
     try { await pool.query(sql); } catch (_) { /* column already exists or no-op */ }
@@ -322,14 +341,14 @@ async function createTables() {
 
 // ─── Seed ─────────────────────────────────────────────────────────────────────
 async function seedData() {
-  const devHash   = await bcryptjs.hash('jabbamaster397', 10);
+  const devHash = await bcryptjs.hash('jabbamaster397', 10);
   const adminHash = await bcryptjs.hash('school123', 10);
   const staffHash = await bcryptjs.hash('123456', 10);
-  const stuHash   = await bcryptjs.hash('123456', 10);
+  const stuHash = await bcryptjs.hash('123456', 10);
 
   const now = new Date();
-  const yr  = now.getFullYear();
-  const mo  = now.getMonth() + 1; // 1-indexed
+  const yr = now.getFullYear();
+  const mo = now.getMonth() + 1; // 1-indexed
 
   // ── Users & Schools ───────────────────────────────────────────────────────
   await pool.query(
@@ -345,27 +364,27 @@ async function seedData() {
   await pool.query(
     `INSERT IGNORE INTO schools (id,name,address,city,state,phone,email,subdomain,rate_per_student,payment_methods,is_active,created_at)
      VALUES (?,?,?,?,?,?,?,?,?,?,1,NOW())`,
-    [ID.S_DPS,'Delhi Public School','123 Main Road, New Delhi','New Delhi','Delhi','011-1234567','admin@dps.edu','dps',250,JSON.stringify(['upi','bank_transfer','cash','cheque'])]
+    [ID.S_DPS, 'Delhi Public School', '123 Main Road, New Delhi', 'New Delhi', 'Delhi', '011-1234567', 'admin@dps.edu', 'dps', 250, JSON.stringify(['upi', 'bank_transfer', 'cash', 'cheque'])]
   );
   await pool.query(
     `INSERT IGNORE INTO schools (id,name,address,city,state,phone,email,subdomain,rate_per_student,payment_methods,is_active,created_at)
      VALUES (?,?,?,?,?,?,?,?,?,?,1,NOW())`,
-    [ID.S_XAV,"St. Xavier's Academy",'456 Park Street, Mumbai','Mumbai','Maharashtra','022-7654321','admin@xavier.edu','xavier',300,JSON.stringify(['upi','bank_transfer','cash'])]
+    [ID.S_XAV, "St. Xavier's Academy", '456 Park Street, Mumbai', 'Mumbai', 'Maharashtra', '022-7654321', 'admin@xavier.edu', 'xavier', 300, JSON.stringify(['upi', 'bank_transfer', 'cash'])]
   );
 
   await pool.query(
     'INSERT IGNORE INTO users (id,email,password,name,role,school_id,phone,is_password_changed,created_at) VALUES (?,?,?,?,?,?,?,1,NOW())',
-    [ID.U_ADM_DPS,'admin@dps.edu',adminHash,'Rajesh Kumar','school_admin',ID.S_DPS,'9876543210']
+    [ID.U_ADM_DPS, 'admin@dps.edu', adminHash, 'Rajesh Kumar', 'school_admin', ID.S_DPS, '9876543210']
   );
   await pool.query(
     'INSERT IGNORE INTO users (id,email,password,name,role,school_id,phone,is_password_changed,created_at) VALUES (?,?,?,?,?,?,?,1,NOW())',
-    [ID.U_ADM_XAV,'admin@xavier.edu',adminHash,"Mary Thomas",'school_admin',ID.S_XAV,'9876543211']
+    [ID.U_ADM_XAV, 'admin@xavier.edu', adminHash, "Mary Thomas", 'school_admin', ID.S_XAV, '9876543211']
   );
 
   // ── Grades & Sections ─────────────────────────────────────────────────────
-  for (const school of ['dps','xav']) {
+  for (const school of ['dps', 'xav']) {
     const schoolId = school === 'dps' ? ID.S_DPS : ID.S_XAV;
-    const sections = school === 'dps' ? ['A','B'] : ['A','B','C'];
+    const sections = school === 'dps' ? ['A', 'B'] : ['A', 'B', 'C'];
     for (let i = 0; i < GRADE_NAMES.length; i++) {
       const gId = ID.GD(school, i);
       await pool.query(
@@ -375,19 +394,19 @@ async function seedData() {
       for (const sec of sections) {
         await pool.query(
           'INSERT IGNORE INTO sections (id,grade_id,school_id,name) VALUES (?,?,?,?)',
-          [ID.SC(school,i,sec), gId, schoolId, sec]
+          [ID.SC(school, i, sec), gId, schoolId, sec]
         );
       }
     }
   }
 
   // ── Subjects ──────────────────────────────────────────────────────────────
-  for (const school of ['dps','xav']) {
+  for (const school of ['dps', 'xav']) {
     const schoolId = school === 'dps' ? ID.S_DPS : ID.S_XAV;
     for (let i = 0; i < SUBJECT_NAMES.length; i++) {
       await pool.query(
         'INSERT IGNORE INTO subjects (id,school_id,name) VALUES (?,?,?)',
-        [ID.SB(school,i), schoolId, SUBJECT_NAMES[i]]
+        [ID.SB(school, i), schoolId, SUBJECT_NAMES[i]]
       );
     }
   }
@@ -409,67 +428,67 @@ async function seedData() {
   // ── Class teacher assignment: Anita → 10th-A ─────────────────────────────
   await pool.query(
     'INSERT IGNORE INTO class_teacher_assignments (id,staff_id,grade_id,section_id,school_id) VALUES (?,?,?,?,?)',
-    [ID.CTA, ID.ST(0), ID.GD('dps',12), ID.SC('dps',12,'A'), ID.S_DPS]
+    [ID.CTA, ID.ST(0), ID.GD('dps', 12), ID.SC('dps', 12, 'A'), ID.S_DPS]
   );
 
   // ── Students (DPS, 10th-A) ────────────────────────────────────────────────
-  const bloodGroups = ['A+','B+','O+','AB+'];
+  const bloodGroups = ['A+', 'B+', 'O+', 'AB+'];
   for (let i = 0; i < STUDENT_SEED.length; i++) {
     const s = STUDENT_SEED[i];
-    const rollNo = `DPS-2024-${String(i+1).padStart(4,'0')}`;
+    const rollNo = `DPS-2024-${String(i + 1).padStart(4, '0')}`;
     await pool.query(
       `INSERT IGNORE INTO students
        (id,school_id,name,roll_number,grade_id,section_id,father_name,mother_name,
         father_phone,mother_phone,address,dob,gender,blood_group,admission_date,is_active)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)`,
       [ID.STU(i), ID.S_DPS, s.name, rollNo,
-       ID.GD('dps',12), ID.SC('dps',12,'A'),
-       s.father, s.mother, s.fp, s.mp,
-       'New Delhi, India',
-       `200${8+(i%3)}-${String((i%9)+1).padStart(2,'0')}-${String(10+i).padStart(2,'0')}`,
-       i%2===0?'Male':'Female', bloodGroups[i%4], '2023-04-01']
+      ID.GD('dps', 12), ID.SC('dps', 12, 'A'),
+      s.father, s.mother, s.fp, s.mp,
+        'New Delhi, India',
+      `200${8 + (i % 3)}-${String((i % 9) + 1).padStart(2, '0')}-${String(10 + i).padStart(2, '0')}`,
+      i % 2 === 0 ? 'Male' : 'Female', bloodGroups[i % 4], '2023-04-01']
     );
     await pool.query(
       'INSERT IGNORE INTO users (id,email,password,name,role,school_id,student_id,phone,mobile_number,is_password_changed,created_at) VALUES (?,?,?,?,?,?,?,?,?,0,NOW())',
-      [ID.USTU(i), `student${i+1}@dps.edu`, stuHash, s.name, 'student', ID.S_DPS, ID.STU(i), s.fp, s.fp]
+      [ID.USTU(i), `student${i + 1}@dps.edu`, stuHash, s.name, 'student', ID.S_DPS, ID.STU(i), s.fp, s.fp]
     );
   }
 
   // ── Payment configs ───────────────────────────────────────────────────────
   const pcRows = [
-    [ID.PC_DPS_UPI, ID.S_DPS,'upi','School UPI (GPay/PhonePe)',1,'dpschool@sbi','Delhi Public School Trust',null,null,null,null,null,null,null],
-    [ID.PC_DPS_BANK,ID.S_DPS,'bank_transfer','School Bank Account',0,null,'Delhi Public School Trust','State Bank of India','30912345678','SBIN0001234','Connaught Place',null,null,null],
-    [ID.PC_DPS_CASH,ID.S_DPS,'cash','Cash Payment at Office',0,null,null,null,null,null,null,'Visit school accounts office (Room 102) between 9 AM - 2 PM on weekdays.',null,null],
-    [ID.PC_DPS_CHEQ,ID.S_DPS,'cheque','Cheque / Demand Draft',0,null,'Delhi Public School Trust',null,null,null,null,'Make cheque/DD payable to "Delhi Public School Trust".',null,'Delhi Public School Trust'],
-    [ID.PC_XAV_UPI, ID.S_XAV,'upi','School UPI',1,'xaviers@icici',"St. Xavier's Educational Trust",null,null,null,null,null,null,null],
-    [ID.PC_XAV_BANK,ID.S_XAV,'bank_transfer','Bank Transfer',0,null,"St. Xavier's Educational Trust",'ICICI Bank','1234567890123','ICIC0001234','Bandra West',null,null,null],
+    [ID.PC_DPS_UPI, ID.S_DPS, 'upi', 'School UPI (GPay/PhonePe)', 1, 'dpschool@sbi', 'Delhi Public School Trust', null, null, null, null, null, null, null],
+    [ID.PC_DPS_BANK, ID.S_DPS, 'bank_transfer', 'School Bank Account', 0, null, 'Delhi Public School Trust', 'State Bank of India', '30912345678', 'SBIN0001234', 'Connaught Place', null, null, null],
+    [ID.PC_DPS_CASH, ID.S_DPS, 'cash', 'Cash Payment at Office', 0, null, null, null, null, null, null, 'Visit school accounts office (Room 102) between 9 AM - 2 PM on weekdays.', null, null],
+    [ID.PC_DPS_CHEQ, ID.S_DPS, 'cheque', 'Cheque / Demand Draft', 0, null, 'Delhi Public School Trust', null, null, null, null, 'Make cheque/DD payable to "Delhi Public School Trust".', null, 'Delhi Public School Trust'],
+    [ID.PC_XAV_UPI, ID.S_XAV, 'upi', 'School UPI', 1, 'xaviers@icici', "St. Xavier's Educational Trust", null, null, null, null, null, null, null],
+    [ID.PC_XAV_BANK, ID.S_XAV, 'bank_transfer', 'Bank Transfer', 0, null, "St. Xavier's Educational Trust", 'ICICI Bank', '1234567890123', 'ICIC0001234', 'Bandra West', null, null, null],
   ];
-  for (const [id,schoolId,mtype,label,isPrimary,upiId,acHolder,bankName,acNum,ifsc,branch,instr,qr,cheqPayable] of pcRows) {
+  for (const [id, schoolId, mtype, label, isPrimary, upiId, acHolder, bankName, acNum, ifsc, branch, instr, qr, cheqPayable] of pcRows) {
     await pool.query(
       `INSERT IGNORE INTO school_payment_config
        (id,school_id,method_type,label,is_primary,upi_id,account_holder,bank_name,account_number,ifsc_code,branch,instructions,qr_image,cheque_payable_to,is_active)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)`,
-      [id,schoolId,mtype,label,isPrimary,upiId,acHolder,bankName,acNum,ifsc,branch,instr,qr,cheqPayable]
+      [id, schoolId, mtype, label, isPrimary, upiId, acHolder, bankName, acNum, ifsc, branch, instr, qr, cheqPayable]
     );
   }
 
   // ── Fee structures ────────────────────────────────────────────────────────
   const grade10DPS = ID.GD('dps', 12);
   await pool.query('INSERT IGNORE INTO fees_structure (id,school_id,grade_id,name,amount,frequency,due_day) VALUES (?,?,?,?,?,?,?)',
-    [ID.FS_TUIT, ID.S_DPS, grade10DPS, 'Tuition Fee',   5000, 'monthly',   10]);
+    [ID.FS_TUIT, ID.S_DPS, grade10DPS, 'Tuition Fee', 5000, 'monthly', 10]);
   await pool.query('INSERT IGNORE INTO fees_structure (id,school_id,grade_id,name,amount,frequency,due_day) VALUES (?,?,?,?,?,?,?)',
-    [ID.FS_TRNP, ID.S_DPS, grade10DPS, 'Transport Fee', 2000, 'monthly',   10]);
+    [ID.FS_TRNP, ID.S_DPS, grade10DPS, 'Transport Fee', 2000, 'monthly', 10]);
   await pool.query('INSERT IGNORE INTO fees_structure (id,school_id,grade_id,name,amount,frequency,due_day) VALUES (?,?,?,?,?,?,?)',
-    [ID.FS_LAB,  ID.S_DPS, grade10DPS, 'Lab Fee',       3000, 'quarterly', 10]);
+    [ID.FS_LAB, ID.S_DPS, grade10DPS, 'Lab Fee', 3000, 'quarterly', 10]);
   await pool.query('INSERT IGNORE INTO fees_structure (id,school_id,grade_id,name,amount,frequency,due_day) VALUES (?,?,?,?,?,?,?)',
-    [ID.FS_ANN,  ID.S_DPS, grade10DPS, 'Annual Fee',   15000, 'annual',    15]);
+    [ID.FS_ANN, ID.S_DPS, grade10DPS, 'Annual Fee', 15000, 'annual', 15]);
 
   // ── Fee payments (current year) ────────────────────────────────────────────
-  const payMethods = ['online','cash','cheque','upi'];
+  const payMethods = ['online', 'cash', 'cheque', 'upi'];
   const paidMonths = Math.min(mo - 1, 6);
 
   for (let m = 1; m <= paidMonths; m++) {
-    const mm = String(m).padStart(2,'0');
+    const mm = String(m).padStart(2, '0');
     const monthKey = `${yr}-${mm}`;
     for (let si = 0; si < STUDENT_SEED.length; si++) {
       if (si === STUDENT_SEED.length - 1 && m === paidMonths) continue; // simulate 1 pending
@@ -480,9 +499,9 @@ async function seedData() {
           `INSERT IGNORE INTO fee_payments (id,student_id,school_id,fee_structure_id,amount,payment_date,payment_method,status,receipt_no,month)
            VALUES (?,?,?,?,?,?,?,?,?,?)`,
           [`seed-fp-m${yr}${mm}-s${si}-f${fi}`, ID.STU(si), ID.S_DPS, fid, amt,
-           `${yr}-${mm}-${String(10+si).padStart(2,'0')}`,
-           payMethods[(si+fi)%payMethods.length], 'paid',
-           `REC-${yr}${mm}-${si}-${fi}`, monthKey]
+          `${yr}-${mm}-${String(10 + si).padStart(2, '0')}`,
+          payMethods[(si + fi) % payMethods.length], 'paid',
+          `REC-${yr}${mm}-${si}-${fi}`, monthKey]
         );
       }
     }
@@ -495,7 +514,7 @@ async function seedData() {
         `INSERT IGNORE INTO fee_payments (id,student_id,school_id,fee_structure_id,amount,payment_date,payment_method,status,receipt_no,month)
          VALUES (?,?,?,?,?,?,?,?,?,?)`,
         [`seed-fp-lab-${yr}01-s${si}`, ID.STU(si), ID.S_DPS, ID.FS_LAB, 3000,
-         `${yr}-01-20`, payMethods[si%payMethods.length], 'paid', `REC-${yr}01-LAB-${si}`, mm]
+        `${yr}-01-20`, payMethods[si % payMethods.length], 'paid', `REC-${yr}01-LAB-${si}`, mm]
       );
     }
   }
@@ -506,7 +525,7 @@ async function seedData() {
         `INSERT IGNORE INTO fee_payments (id,student_id,school_id,fee_structure_id,amount,payment_date,payment_method,status,receipt_no,month)
          VALUES (?,?,?,?,?,?,?,?,?,?)`,
         [`seed-fp-ann-${yr}-s${si}`, ID.STU(si), ID.S_DPS, ID.FS_ANN, 15000,
-         `${yr}-01-05`, payMethods[si%payMethods.length], 'paid', `REC-${yr}01-ANN-${si}`, `${yr}-01`]
+        `${yr}-01-05`, payMethods[si % payMethods.length], 'paid', `REC-${yr}01-ANN-${si}`, `${yr}-01`]
       );
     }
   }
@@ -536,7 +555,7 @@ async function seedData() {
         `INSERT IGNORE INTO marks (id,student_id,school_id,exam_id,subject_id,obtained_marks,total_marks,grade)
          VALUES (?,?,?,?,?,?,?,?)`,
         [`seed-mrk-e1-s${si}-su${j}`, ID.STU(si), ID.S_DPS, ID.EX1,
-         ID.SB('dps', markSubjects[j]), obtained, 100, grade]
+        ID.SB('dps', markSubjects[j]), obtained, 100, grade]
       );
     }
   }
@@ -546,8 +565,8 @@ async function seedData() {
     const date = new Date(yr, mo - 1, d);
     if (date.getDay() === 0) continue; // skip Sunday
     const dateStr = date.toISOString().split('T')[0];
-    const mm = String(mo).padStart(2,'0');
-    const dd = String(d).padStart(2,'0');
+    const mm = String(mo).padStart(2, '0');
+    const dd = String(d).padStart(2, '0');
 
     for (let si = 0; si < STUDENT_SEED.length; si++) {
       const roll = (si + d) % 10;
@@ -568,13 +587,13 @@ async function seedData() {
 
   // ── Holidays ──────────────────────────────────────────────────────────────
   const holidays = [
-    ['seed-hol-001',ID.S_DPS,'Republic Day',    `${yr}-01-26`,'national'],
-    ['seed-hol-002',ID.S_DPS,'Holi',            `${yr}-03-25`,'festival'],
-    ['seed-hol-003',ID.S_DPS,'Independence Day',`${yr}-08-15`,'national'],
-    ['seed-hol-004',ID.S_DPS,'Diwali',          `${yr}-11-01`,'festival'],
-    ['seed-hol-005',ID.S_DPS,'Christmas',       `${yr}-12-25`,'festival'],
-    ['seed-hol-006',ID.S_DPS,'Summer Vacation Start',`${yr}-05-15`,'vacation'],
-    ['seed-hol-007',ID.S_DPS,'Summer Vacation End',  `${yr}-06-30`,'vacation'],
+    ['seed-hol-001', ID.S_DPS, 'Republic Day', `${yr}-01-26`, 'national'],
+    ['seed-hol-002', ID.S_DPS, 'Holi', `${yr}-03-25`, 'festival'],
+    ['seed-hol-003', ID.S_DPS, 'Independence Day', `${yr}-08-15`, 'national'],
+    ['seed-hol-004', ID.S_DPS, 'Diwali', `${yr}-11-01`, 'festival'],
+    ['seed-hol-005', ID.S_DPS, 'Christmas', `${yr}-12-25`, 'festival'],
+    ['seed-hol-006', ID.S_DPS, 'Summer Vacation Start', `${yr}-05-15`, 'vacation'],
+    ['seed-hol-007', ID.S_DPS, 'Summer Vacation End', `${yr}-06-30`, 'vacation'],
   ];
   for (const row of holidays) {
     await pool.query('INSERT IGNORE INTO holidays (id,school_id,name,date,type) VALUES (?,?,?,?,?)', row);
@@ -583,20 +602,20 @@ async function seedData() {
   // ── Leaves ────────────────────────────────────────────────────────────────
   await pool.query(
     'INSERT IGNORE INTO leaves (id,staff_id,school_id,type,start_date,end_date,reason,status,applied_on) VALUES (?,?,?,?,?,?,?,?,?)',
-    ['seed-lv-001',ID.ST(0),ID.S_DPS,'sick','2024-03-10','2024-03-11','Feeling unwell','approved','2024-03-09']
+    ['seed-lv-001', ID.ST(0), ID.S_DPS, 'sick', '2024-03-10', '2024-03-11', 'Feeling unwell', 'approved', '2024-03-09']
   );
   await pool.query(
     'INSERT IGNORE INTO leaves (id,staff_id,school_id,type,start_date,end_date,reason,status,applied_on) VALUES (?,?,?,?,?,?,?,?,?)',
-    ['seed-lv-002',ID.ST(0),ID.S_DPS,'casual','2024-04-20','2024-04-20','Personal work','pending','2024-04-18']
+    ['seed-lv-002', ID.ST(0), ID.S_DPS, 'casual', '2024-04-20', '2024-04-20', 'Personal work', 'pending', '2024-04-18']
   );
 
   // ── Schedules ─────────────────────────────────────────────────────────────
-  const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const periods = [
-    {p:1,s:'08:00',e:'08:45'},{p:2,s:'08:45',e:'09:30'},
-    {p:3,s:'09:45',e:'10:30'},{p:4,s:'10:30',e:'11:15'},
-    {p:5,s:'11:30',e:'12:15'},{p:6,s:'12:15',e:'13:00'},
-    {p:7,s:'13:30',e:'14:15'},{p:8,s:'14:15',e:'15:00'},
+    { p: 1, s: '08:00', e: '08:45' }, { p: 2, s: '08:45', e: '09:30' },
+    { p: 3, s: '09:45', e: '10:30' }, { p: 4, s: '10:30', e: '11:15' },
+    { p: 5, s: '11:30', e: '12:15' }, { p: 6, s: '12:15', e: '13:00' },
+    { p: 7, s: '13:30', e: '14:15' }, { p: 8, s: '14:15', e: '15:00' },
   ];
   const schedSubjs = [0, 3, 1]; // Math, Science, English
   const teacherIdxs = [0, 1, 2, 3, 4, 0]; // staff indices cycling
@@ -608,22 +627,22 @@ async function seedData() {
         `INSERT IGNORE INTO schedules (id,school_id,grade_id,section_id,subject_id,staff_id,day,period,start_time,end_time)
          VALUES (?,?,?,?,?,?,?,?,?,?)`,
         [`seed-sch-d${di}-p${per.p}`,
-         ID.S_DPS, ID.GD('dps',12), ID.SC('dps',12,'A'),
-         ID.SB('dps', schedSubjs[pi % schedSubjs.length]),
-         ID.ST(teacherIdxs[pi % teacherIdxs.length]),
-         days[di], per.p, per.s, per.e]
+        ID.S_DPS, ID.GD('dps', 12), ID.SC('dps', 12, 'A'),
+        ID.SB('dps', schedSubjs[pi % schedSubjs.length]),
+        ID.ST(teacherIdxs[pi % teacherIdxs.length]),
+        days[di], per.p, per.s, per.e]
       );
     }
   }
 
   // ── Other expenses ────────────────────────────────────────────────────────
   const expTemplates = [
-    {cat:'Utilities',   desc:'Electricity Bill',       amounts:[8200,7900,9100,8500,7600,8800]},
-    {cat:'Utilities',   desc:'Internet & Telephone',   amounts:[3500,3500,3500,3500,3500,3500]},
-    {cat:'Maintenance', desc:'Building Maintenance',   amounts:[5000,0,12000,4000,0,6000]},
-    {cat:'Stationery',  desc:'Office & Lab Supplies',  amounts:[2200,1800,2500,1900,2100,2400]},
-    {cat:'Transport',   desc:'School Bus Maintenance', amounts:[4500,3200,5800,4100,3700,4900]},
-    {cat:'Other',       desc:'Miscellaneous',          amounts:[1200,900,1500,1100,800,1300]},
+    { cat: 'Utilities', desc: 'Electricity Bill', amounts: [8200, 7900, 9100, 8500, 7600, 8800] },
+    { cat: 'Utilities', desc: 'Internet & Telephone', amounts: [3500, 3500, 3500, 3500, 3500, 3500] },
+    { cat: 'Maintenance', desc: 'Building Maintenance', amounts: [5000, 0, 12000, 4000, 0, 6000] },
+    { cat: 'Stationery', desc: 'Office & Lab Supplies', amounts: [2200, 1800, 2500, 1900, 2100, 2400] },
+    { cat: 'Transport', desc: 'School Bus Maintenance', amounts: [4500, 3200, 5800, 4100, 3700, 4900] },
+    { cat: 'Other', desc: 'Miscellaneous', amounts: [1200, 900, 1500, 1100, 800, 1300] },
   ];
   for (let ti = 0; ti < expTemplates.length; ti++) {
     const tpl = expTemplates[ti];
@@ -632,7 +651,7 @@ async function seedData() {
       if (amt === 0) continue;
       const expMonth = mi + 1;
       if (expMonth >= mo) continue; // only past months
-      const mm = String(expMonth).padStart(2,'0');
+      const mm = String(expMonth).padStart(2, '0');
       await pool.query(
         `INSERT IGNORE INTO other_expenses (id,school_id,category,description,amount,date,month) VALUES (?,?,?,?,?,?,?)`,
         [`seed-oe-t${ti}-m${mi}`, ID.S_DPS, tpl.cat, tpl.desc, amt, `${yr}-${mm}-05`, `${yr}-${mm}`]

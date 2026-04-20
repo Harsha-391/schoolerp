@@ -1,58 +1,106 @@
 import { useRef } from 'react';
 import { X, Printer } from 'lucide-react';
+import { QRCodeCanvas } from 'qrcode.react';
 
-/**
- * IDCard — printable ID card modal for staff and students.
- *
- * Props:
- *   person  — { name, avatar, role/designation, grade_name, section_name,
- *               roll_number, id, email, phone, blood_group, dob }
- *   type    — 'student' | 'staff'
- *   school  — { name, subdomain, city, state }
- *   onClose — () => void
- */
+function fmtDate(val) {
+  if (!val) return null;
+  const d = new Date(val);
+  if (isNaN(d)) return val;
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
 export default function IDCard({ person, type, school, onClose }) {
-  const cardRef = useRef(null);
+  const qrRef = useRef(null);
+
+  const qrToken = `${type === 'student' ? 'student' : 'staff'}:${person.id}`;
 
   const handlePrint = () => {
-    const content = cardRef.current.innerHTML;
-    const win = window.open('', '_blank', 'width=420,height=700');
-    win.document.write(`
-      <html>
-        <head>
-          <title>ID Card — ${person.name}</title>
-          <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f4ff; display: flex; justify-content: center; align-items: flex-start; padding: 20px; }
-            .id-card { width: 340px; background: #fff; border-radius: 18px; overflow: hidden; box-shadow: 0 8px 32px rgba(99,102,241,0.18); }
-            .id-card-header { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); padding: 22px 20px 30px; text-align: center; color: #fff; }
-            .school-name { font-size: 14px; font-weight: 700; letter-spacing: 0.5px; }
-            .school-sub { font-size: 10px; opacity: 0.85; margin-top: 2px; }
-            .id-type { display: inline-block; margin-top: 8px; background: rgba(255,255,255,0.22); border-radius: 20px; padding: 3px 14px; font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
-            .id-card-photo-wrap { display: flex; justify-content: center; margin-top: -36px; margin-bottom: 0; }
-            .id-card-photo { width: 76px; height: 76px; border-radius: 50%; border: 3px solid #fff; background: linear-gradient(135deg, #6366f1, #8b5cf6); display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 700; color: #fff; overflow: hidden; box-shadow: 0 4px 16px rgba(99,102,241,0.25); }
-            .id-card-photo img { width: 100%; height: 100%; object-fit: cover; }
-            .id-card-body { padding: 10px 20px 20px; }
-            .id-name { text-align: center; font-size: 16px; font-weight: 800; color: #1e1b4b; margin-bottom: 2px; }
-            .id-role { text-align: center; font-size: 11px; color: #6366f1; font-weight: 600; margin-bottom: 14px; }
-            .id-divider { height: 1px; background: linear-gradient(90deg, transparent, #e0e7ff, transparent); margin: 12px 0; }
-            .id-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 11px; }
-            .id-label { color: #9ca3af; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; font-size: 9px; }
-            .id-value { color: #1f2937; font-weight: 700; font-size: 12px; }
-            .id-card-footer { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); padding: 10px 20px; text-align: center; }
-            .id-card-id { font-family: monospace; font-size: 11px; color: rgba(255,255,255,0.9); letter-spacing: 1.5px; }
-          </style>
-        </head>
-        <body>${content}</body>
-      </html>
-    `);
+    // Extract QR as PNG data URL from the canvas element
+    const canvas = qrRef.current?.querySelector('canvas');
+    const qrDataUrl = canvas ? canvas.toDataURL('image/png') : '';
+
+    const avatarHtml = person.avatar
+      ? `<img src="${person.avatar}" style="width:100%;height:100%;object-fit:cover;display:block;" />`
+      : `<span style="font-size:22px;font-weight:700;color:#fff;">${person.name?.split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase()}</span>`;
+
+    const roleLabel = type === 'student'
+      ? `${person.grade_name || ''}${person.section_name ? ' - ' + person.section_name : ''}`.trim()
+      : person.designation || 'Staff';
+
+    const rows = type === 'student' ? [
+      person.roll_number  && ['Roll No.',  person.roll_number],
+      person.dob          && ['DOB',        fmtDate(person.dob)],
+      person.blood_group  && ['Blood',      person.blood_group],
+      person.father_name  && ['Father',     person.father_name],
+      person.father_phone && ['Contact',    person.father_phone],
+    ].filter(Boolean) : [
+      person.department   && ['Dept',    person.department],
+      person.phone        && ['Phone',   person.phone],
+      person.email        && ['Email',   person.email],
+      person.joining_date && ['Joined',  fmtDate(person.joining_date)],
+    ].filter(Boolean);
+
+    const rowsHtml = rows.map(([label, value]) => `
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;gap:4px;">
+        <span style="font-size:8px;color:#9ca3af;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;flex-shrink:0;">${label}</span>
+        <span style="font-size:10px;color:#1f2937;font-weight:700;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:115px;">${value}</span>
+      </div>`).join('');
+
+    const html = `<!DOCTYPE html><html><head>
+      <title>ID Card — ${person.name}</title>
+      <style>
+        *{margin:0;padding:0;box-sizing:border-box;}
+        @page{size:4in 4in;margin:0;}
+        html,body{width:4in;height:4in;background:#fff;}
+      </style>
+    </head><body>
+      <div style="width:4in;height:4in;display:flex;flex-direction:column;font-family:'Segoe UI',Arial,sans-serif;overflow:hidden;background:#fff;">
+        <!-- Header -->
+        <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:10px 14px 18px;text-align:center;color:#fff;">
+          <div style="font-size:12px;font-weight:700;letter-spacing:0.5px;">${school?.name || 'School ERP'}</div>
+          ${school?.city ? `<div style="font-size:9px;opacity:0.85;margin-top:2px;">${school.city}${school.state ? ', ' + school.state : ''}</div>` : ''}
+          <div style="display:inline-block;margin-top:6px;background:rgba(255,255,255,0.22);border-radius:20px;padding:2px 12px;font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">
+            ${type === 'student' ? 'Student ID Card' : 'Staff ID Card'}
+          </div>
+        </div>
+        <!-- Body -->
+        <div style="display:flex;flex:1;padding:10px 14px 8px;gap:12px;align-items:center;overflow:hidden;">
+          <!-- Photo + QR -->
+          <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex-shrink:0;">
+            <div style="width:72px;height:72px;border-radius:10px;border:2px solid #e0e7ff;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;overflow:hidden;">
+              ${avatarHtml}
+            </div>
+            <div style="border:2px solid #e0e7ff;border-radius:6px;padding:3px;background:#fff;">
+              ${qrDataUrl ? `<img src="${qrDataUrl}" width="72" height="72" />` : ''}
+            </div>
+          </div>
+          <!-- Info -->
+          <div style="flex:1;min-width:0;overflow:hidden;">
+            <div style="font-size:13px;font-weight:800;color:#1e1b4b;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${person.name}</div>
+            <div style="font-size:10px;color:#6366f1;font-weight:600;margin-bottom:8px;">${roleLabel}</div>
+            <div style="height:1px;background:linear-gradient(90deg,transparent,#e0e7ff,transparent);margin:0 0 7px;"></div>
+            ${rowsHtml}
+          </div>
+        </div>
+        <!-- Footer -->
+        <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:6px 14px;text-align:center;">
+          <div style="font-family:monospace;font-size:9px;color:rgba(255,255,255,0.9);letter-spacing:1.5px;">
+            ID: ${person.id?.substring(0,12)?.toUpperCase() || '—'}
+          </div>
+        </div>
+      </div>
+    </body></html>`;
+
+    const win = window.open('', '_blank', 'width=500,height=530');
+    win.document.open();
+    win.document.write(html);
     win.document.close();
-    setTimeout(() => { win.focus(); win.print(); }, 300);
+    setTimeout(() => { win.focus(); win.print(); }, 400);
   };
 
   const initials = person.name?.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
   const roleLabel = type === 'student'
-    ? `${person.grade_name || ''} ${person.section_name ? '- ' + person.section_name : ''}`.trim()
+    ? `${person.grade_name || ''}${person.section_name ? ' - ' + person.section_name : ''}`.trim()
     : person.designation || 'Staff';
 
   return (
@@ -70,122 +118,59 @@ export default function IDCard({ person, type, school, onClose }) {
         </div>
 
         {/* Card preview */}
-        <div ref={cardRef}>
-          <div className="id-card" style={{
-            width: '340px',
-            background: '#fff',
-            borderRadius: '18px',
-            overflow: 'hidden',
-            boxShadow: '0 8px 32px rgba(99,102,241,0.25)',
-            fontFamily: "'Segoe UI', Arial, sans-serif",
-          }}>
-            {/* Header */}
-            <div style={{
-              background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-              padding: '22px 20px 34px',
-              textAlign: 'center',
-              color: '#fff',
-            }}>
-              <div style={{ fontSize: '15px', fontWeight: 700, letterSpacing: '0.5px' }}>
-                {school?.name || 'School ERP'}
-              </div>
-              {school?.city && (
-                <div style={{ fontSize: '10px', opacity: 0.85, marginTop: '2px' }}>
-                  {school.city}{school.state ? ', ' + school.state : ''}
-                </div>
-              )}
-              <div style={{
-                display: 'inline-block',
-                marginTop: '10px',
-                background: 'rgba(255,255,255,0.22)',
-                borderRadius: '20px',
-                padding: '3px 16px',
-                fontSize: '10px',
-                fontWeight: 700,
-                letterSpacing: '1.5px',
-                textTransform: 'uppercase',
-              }}>
-                {type === 'student' ? 'Student ID Card' : 'Staff ID Card'}
-              </div>
+        <div style={{
+          width: '320px', height: '320px', background: '#fff',
+          display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          boxShadow: '0 8px 32px rgba(99,102,241,0.25)', borderRadius: '14px',
+          fontFamily: "'Segoe UI', Arial, sans-serif",
+        }}>
+          {/* Header */}
+          <div style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', padding: '10px 14px 18px', textAlign: 'center', color: '#fff' }}>
+            <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.5px' }}>{school?.name || 'School ERP'}</div>
+            {school?.city && <div style={{ fontSize: '9px', opacity: 0.85, marginTop: '2px' }}>{school.city}{school.state ? ', ' + school.state : ''}</div>}
+            <div style={{ display: 'inline-block', marginTop: '6px', background: 'rgba(255,255,255,0.22)', borderRadius: '20px', padding: '2px 12px', fontSize: '9px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
+              {type === 'student' ? 'Student ID Card' : 'Staff ID Card'}
             </div>
+          </div>
 
-            {/* Photo */}
-            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '-38px', marginBottom: '0' }}>
-              <div style={{
-                width: '76px',
-                height: '76px',
-                borderRadius: '50%',
-                border: '3px solid #fff',
-                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '26px',
-                fontWeight: 700,
-                color: '#fff',
-                overflow: 'hidden',
-                boxShadow: '0 4px 16px rgba(99,102,241,0.3)',
-                flexShrink: 0,
-              }}>
+          {/* Body */}
+          <div style={{ display: 'flex', flex: 1, padding: '10px 14px 8px', gap: '12px', alignItems: 'center' }}>
+            {/* Photo + QR column */}
+            <div ref={qrRef} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+              <div style={{ width: '72px', height: '72px', borderRadius: '10px', border: '2px solid #e0e7ff', background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', fontWeight: 700, color: '#fff', overflow: 'hidden' }}>
                 {person.avatar
-                  ? <img src={person.avatar} alt={person.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ? <img src={person.avatar} alt={person.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                   : initials
                 }
               </div>
+              <div style={{ border: '2px solid #e0e7ff', borderRadius: '6px', padding: '3px', background: '#fff' }}>
+                <QRCodeCanvas value={qrToken} size={72} level="M" />
+              </div>
             </div>
 
-            {/* Body */}
-            <div style={{ padding: '12px 22px 20px' }}>
-              <div style={{ textAlign: 'center', fontSize: '17px', fontWeight: 800, color: '#1e1b4b', marginBottom: '2px' }}>
-                {person.name}
-              </div>
-              <div style={{ textAlign: 'center', fontSize: '11px', color: '#6366f1', fontWeight: 600, marginBottom: '14px' }}>
-                {roleLabel}
-              </div>
+            {/* Info column */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: '13px', fontWeight: 800, color: '#1e1b4b', marginBottom: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{person.name}</div>
+              <div style={{ fontSize: '10px', color: '#6366f1', fontWeight: 600, marginBottom: '8px' }}>{roleLabel}</div>
+              <div style={{ height: '1px', background: 'linear-gradient(90deg,transparent,#e0e7ff,transparent)', margin: '0 0 7px' }} />
 
-              <div style={{ height: '1px', background: 'linear-gradient(90deg, transparent, #e0e7ff, transparent)', margin: '0 0 12px' }} />
+              {type === 'student' && person.roll_number  && <InfoRow label="Roll No." value={person.roll_number} />}
+              {type === 'student' && person.dob          && <InfoRow label="DOB"       value={fmtDate(person.dob)} />}
+              {type === 'student' && person.blood_group  && <InfoRow label="Blood"     value={person.blood_group} />}
+              {type === 'student' && person.father_name  && <InfoRow label="Father"    value={person.father_name} />}
+              {type === 'student' && person.father_phone && <InfoRow label="Contact"   value={person.father_phone} />}
 
-              {type === 'student' && person.roll_number && (
-                <Row label="Roll No." value={person.roll_number} />
-              )}
-              {type === 'student' && person.dob && (
-                <Row label="Date of Birth" value={person.dob} />
-              )}
-              {type === 'student' && person.blood_group && (
-                <Row label="Blood Group" value={person.blood_group} />
-              )}
-              {type === 'student' && person.father_name && (
-                <Row label="Father" value={person.father_name} />
-              )}
-              {type === 'student' && person.father_phone && (
-                <Row label="Contact" value={person.father_phone} />
-              )}
-
-              {type === 'staff' && person.department && (
-                <Row label="Department" value={person.department} />
-              )}
-              {type === 'staff' && person.phone && (
-                <Row label="Phone" value={person.phone} />
-              )}
-              {type === 'staff' && person.email && (
-                <Row label="Email" value={person.email} />
-              )}
-              {type === 'staff' && person.joining_date && (
-                <Row label="Joined" value={person.joining_date} />
-              )}
-
-              <div style={{ height: '1px', background: 'linear-gradient(90deg, transparent, #e0e7ff, transparent)', margin: '12px 0 0' }} />
+              {type === 'staff' && person.department   && <InfoRow label="Dept"   value={person.department} />}
+              {type === 'staff' && person.phone        && <InfoRow label="Phone"  value={person.phone} />}
+              {type === 'staff' && person.email        && <InfoRow label="Email"  value={person.email} truncate />}
+              {type === 'staff' && person.joining_date && <InfoRow label="Joined" value={fmtDate(person.joining_date)} />}
             </div>
+          </div>
 
-            {/* Footer */}
-            <div style={{
-              background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-              padding: '10px 20px',
-              textAlign: 'center',
-            }}>
-              <div style={{ fontFamily: 'monospace', fontSize: '11px', color: 'rgba(255,255,255,0.9)', letterSpacing: '1.5px' }}>
-                ID: {person.id?.substring(0, 12)?.toUpperCase() || '—'}
-              </div>
+          {/* Footer */}
+          <div style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', padding: '6px 14px', textAlign: 'center' }}>
+            <div style={{ fontFamily: 'monospace', fontSize: '9px', color: 'rgba(255,255,255,0.9)', letterSpacing: '1.5px' }}>
+              ID: {person.id?.substring(0, 12)?.toUpperCase() || '—'}
             </div>
           </div>
         </div>
@@ -195,11 +180,11 @@ export default function IDCard({ person, type, school, onClose }) {
   );
 }
 
-function Row({ label, value }) {
+function InfoRow({ label, value, truncate }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-      <span style={{ fontSize: '9px', color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</span>
-      <span style={{ fontSize: '12px', color: '#1f2937', fontWeight: 700 }}>{value}</span>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px', gap: '4px' }}>
+      <span style={{ fontSize: '8px', color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', flexShrink: 0 }}>{label}</span>
+      <span style={{ fontSize: '10px', color: '#1f2937', fontWeight: 700, ...(truncate ? { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '110px' } : {}) }}>{value}</span>
     </div>
   );
 }

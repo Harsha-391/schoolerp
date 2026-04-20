@@ -3,7 +3,7 @@ import Layout from '../../components/Layout';
 import api from '../../utils/api';
 import IDCard from '../../components/IDCard';
 import { useAuth } from '../../context/AuthContext';
-import { Plus, X, Mail, Phone, Briefcase, CreditCard, Upload } from 'lucide-react';
+import { Plus, X, Mail, Phone, Briefcase, CreditCard, Upload, Trash2 } from 'lucide-react';
 import { SkManagementPage } from '../../components/Skeleton';
 
 function compressImage(file, maxWidth = 300) {
@@ -29,8 +29,10 @@ export default function StaffManagement() {
   const { school } = useAuth();
   const [staff, setStaff] = useState([]);
   const [showModal, setShowModal] = useState(false);
-  const [idCardTarget, setIdCardTarget] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [idCardTarget,  setIdCardTarget]  = useState(null);
+  const [deleteTarget,  setDeleteTarget]  = useState(null);
+  const [deleting,      setDeleting]      = useState(false);
+  const [loading,       setLoading]       = useState(true);
   const [form, setForm] = useState({ name: '', email: '', phone: '', designation: 'Teacher', department: '', salary: '', avatar: '' });
   const [avatarPreview, setAvatarPreview] = useState('');
 
@@ -59,6 +61,17 @@ export default function StaffManagement() {
     loadStaff();
   };
 
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await api.delete(`/admin/staff/${deleteTarget.id}`);
+      setDeleteTarget(null);
+      loadStaff();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to delete');
+    } finally { setDeleting(false); }
+  };
+
   const openAddModal = () => {
     setForm({ name: '', email: '', phone: '', designation: 'Teacher', department: '', salary: '', avatar: '' });
     setAvatarPreview('');
@@ -84,10 +97,27 @@ export default function StaffManagement() {
           <div className="card" key={s.id}>
             <div className="card-body" style={{ padding: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
-                {s.avatar
-                  ? <img src={s.avatar} alt={s.name} style={{ width: '48px', height: '48px', borderRadius: '14px', objectFit: 'cover', flexShrink: 0 }} />
-                  : <div className="user-avatar" style={{ width: '48px', height: '48px', fontSize: '18px', borderRadius: '14px' }}>{s.name?.charAt(0)}</div>
-                }
+                <label title="Click to change photo" style={{ cursor: 'pointer', flexShrink: 0, position: 'relative' }}>
+                  {s.avatar
+                    ? <img src={s.avatar} alt={s.name} style={{ width: '48px', height: '48px', borderRadius: '14px', objectFit: 'cover', display: 'block' }} />
+                    : <div className="user-avatar" style={{ width: '48px', height: '48px', fontSize: '18px', borderRadius: '14px' }}>{s.name?.charAt(0)}</div>
+                  }
+                  <div style={{
+                    position: 'absolute', inset: 0, borderRadius: '14px',
+                    background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    opacity: 0, transition: 'opacity 0.15s', pointerEvents: 'none',
+                  }} onMouseEnter={e => e.currentTarget.style.opacity = 1} onMouseLeave={e => e.currentTarget.style.opacity = 0}>
+                    <Upload size={14} color="#fff" />
+                  </div>
+                  <input type="file" accept="image/*" style={{ display: 'none' }}
+                    onChange={async (e) => {
+                      const file = e.target.files[0];
+                      if (!file) return;
+                      const dataUrl = await compressImage(file);
+                      await api.put(`/admin/staff/${s.id}/avatar`, { avatar: dataUrl });
+                      loadStaff();
+                    }} />
+                </label>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 700, fontSize: '15px' }}>{s.name}</div>
                   <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{s.designation} · {s.department}</div>
@@ -132,13 +162,21 @@ export default function StaffManagement() {
                 </div>
               )}
 
-              <div style={{ marginTop: '12px' }}>
+              <div style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
                 <button
                   className="btn btn-sm btn-secondary"
-                  style={{ width: '100%', justifyContent: 'center' }}
+                  style={{ flex: 1, justifyContent: 'center' }}
                   onClick={() => setIdCardTarget(s)}
                 >
-                  <CreditCard size={13} /> View ID Card
+                  <CreditCard size={13} /> ID Card
+                </button>
+                <button
+                  className="btn btn-sm"
+                  style={{ padding: '7px 11px', background: 'rgba(239,68,68,0.1)', color: 'var(--error)', border: '1px solid rgba(239,68,68,0.2)' }}
+                  onClick={() => setDeleteTarget(s)}
+                  title="Delete staff"
+                >
+                  <Trash2 size={13} />
                 </button>
               </div>
             </div>
@@ -230,6 +268,34 @@ export default function StaffManagement() {
           school={school}
           onClose={() => setIdCardTarget(null)}
         />
+      )}
+
+      {/* Delete Confirm Modal */}
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px' }}>
+            <div className="modal-header">
+              <div className="modal-title" style={{ color: 'var(--error)' }}>Delete Staff Member</div>
+              <button className="modal-close" onClick={() => setDeleteTarget(null)}><X size={16} /></button>
+            </div>
+            <div className="modal-body">
+              <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '10px', padding: '12px 14px', fontSize: '13px', color: 'var(--error)' }}>
+                This will permanently delete <strong>{deleteTarget.name}</strong> and all their attendance, leave, and login records. This cannot be undone.
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setDeleteTarget(null)}>Cancel</button>
+              <button
+                className="btn"
+                disabled={deleting}
+                onClick={handleDelete}
+                style={{ background: 'var(--error)', color: '#fff' }}
+              >
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </Layout>
   );

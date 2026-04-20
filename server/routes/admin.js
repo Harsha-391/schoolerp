@@ -134,6 +134,21 @@ router.put('/staff/:id/avatar', async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
+router.delete('/staff/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const schoolId = req.user.school_id;
+    const [[staff]] = await db.query('SELECT id FROM staff WHERE id=? AND school_id=?', [id, schoolId]);
+    if (!staff) return res.status(404).json({ error: 'Staff not found' });
+    await db.query('DELETE FROM attendance_staff WHERE staff_id=? AND school_id=?', [id, schoolId]);
+    await db.query('DELETE FROM leaves WHERE staff_id=? AND school_id=?', [id, schoolId]);
+    await db.query('DELETE FROM class_teacher_assignments WHERE staff_id=? AND school_id=?', [id, schoolId]);
+    await db.query('DELETE FROM users WHERE staff_id=? AND school_id=?', [id, schoolId]);
+    await db.query('DELETE FROM staff WHERE id=? AND school_id=?', [id, schoolId]);
+    res.json({ success: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
 // ── Students ───────────────────────────────────────────────────────────────────
 router.get('/students', async (req, res) => {
   try {
@@ -206,6 +221,21 @@ router.put('/students/:id/avatar', async (req, res) => {
     await db.query('UPDATE students SET avatar=? WHERE id=? AND school_id=?',
       [avatar, req.params.id, req.user.school_id]);
     res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+router.delete('/students/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const schoolId = req.user.school_id;
+    const [[student]] = await db.query('SELECT id FROM students WHERE id=? AND school_id=?', [id, schoolId]);
+    if (!student) return res.status(404).json({ error: 'Student not found' });
+    await db.query('DELETE FROM attendance_students WHERE student_id=? AND school_id=?', [id, schoolId]);
+    await db.query('DELETE FROM fee_payments WHERE student_id=? AND school_id=?', [id, schoolId]);
+    await db.query('DELETE FROM marks WHERE student_id=? AND school_id=?', [id, schoolId]);
+    await db.query('DELETE FROM users WHERE student_id=? AND school_id=?', [id, schoolId]);
+    await db.query('DELETE FROM students WHERE id=? AND school_id=?', [id, schoolId]);
+    res.json({ success: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
@@ -601,6 +631,296 @@ router.delete('/finance/expenses/:id', async (req, res) => {
     );
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Expense not found' });
     res.json({ success: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+// ── QR Attendance ─────────────────────────────────────────────────────────────
+
+router.get('/school', async (req, res) => {
+  try {
+    const [[school]] = await db.query('SELECT * FROM schools WHERE id = ?', [req.user.school_id]);
+    res.json(school);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+router.post('/qr/scan', async (req, res) => {
+  try {
+    const { token } = req.body;
+    const schoolId = req.user.school_id;
+    if (!token) return res.status(400).json({ error: 'Token required' });
+
+    const colonIdx = token.indexOf(':');
+    if (colonIdx === -1) return res.status(400).json({ error: 'Invalid QR token' });
+    const tokenType = token.substring(0, colonIdx);
+    const personId  = token.substring(colonIdx + 1);
+    if (!personId) return res.status(400).json({ error: 'Invalid QR token' });
+
+    const today = new Date().toISOString().split('T')[0];
+    const now   = new Date().toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false });
+
+    if (tokenType === 'student') {
+      const [[student]] = await db.query(
+        `SELECT s.*, g.name AS grade_name, sec.name AS section_name
+         FROM students s
+         LEFT JOIN grades g ON s.grade_id = g.id
+         LEFT JOIN sections sec ON s.section_id = sec.id
+         WHERE s.id = ? AND s.school_id = ?`,
+        [personId, schoolId]
+      );
+      if (!student) return res.status(404).json({ error: 'Student not found in this school' });
+
+      const [[existing]] = await db.query(
+        'SELECT * FROM attendance_students WHERE student_id = ? AND date = ?',
+        [personId, today]
+      );
+
+      const classLabel = `${student.grade_name || 'N/A'}${student.section_name ? '-' + student.section_name : ''}`;
+      let action;
+      if (!existing) {
+        await db.query(
+          'INSERT INTO attendance_students (id,student_id,school_id,date,status,check_in,marked_by) VALUES (?,?,?,?,?,?,?)',
+          [uuidv4(), personId, schoolId, today, 'present', now, req.user.id]
+        );
+        action = 'in';
+      } else if (!existing.check_out) {
+        await db.query('UPDATE attendance_students SET check_out=? WHERE id=?', [now, existing.id]);
+        action = 'out';
+      } else {
+        action = 'already';
+      }
+      return res.json({
+        type: 'student', name: student.name, class: classLabel,
+        avatar: student.avatar, action, time: now,
+        announcement: action === 'already'
+          ? `${student.name} already fully marked for today`
+          : `${student.name} from ${classLabel} has marked ${action === 'in' ? 'IN' : 'OUT'} at ${now}`,
+      });
+    }
+
+    if (tokenType === 'staff') {
+      const [[staff]] = await db.query(
+        'SELECT * FROM staff WHERE id = ? AND school_id = ?', [personId, schoolId]
+      );
+      if (!staff) return res.status(404).json({ error: 'Staff not found in this school' });
+
+      const [[existing]] = await db.query(
+        'SELECT * FROM attendance_staff WHERE staff_id = ? AND date = ?', [personId, today]
+      );
+
+      const roleLabel = staff.designation || 'Staff';
+      let action;
+      if (!existing) {
+        await db.query(
+          'INSERT INTO attendance_staff (id,staff_id,school_id,date,status,check_in) VALUES (?,?,?,?,?,?)',
+          [uuidv4(), personId, schoolId, today, 'present', now]
+        );
+        action = 'in';
+      } else if (!existing.check_out) {
+        await db.query('UPDATE attendance_staff SET check_out=? WHERE id=?', [now, existing.id]);
+        action = 'out';
+      } else {
+        action = 'already';
+      }
+      return res.json({
+        type: 'staff', name: staff.name, class: roleLabel,
+        avatar: staff.avatar, action, time: now,
+        announcement: action === 'already'
+          ? `${staff.name} already fully marked for today`
+          : `${staff.name} (${roleLabel}) has marked ${action === 'in' ? 'IN' : 'OUT'} at ${now}`,
+      });
+    }
+
+    return res.status(400).json({ error: 'Invalid token type' });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+// ── Syllabus / Curriculum ──────────────────────────────────────────────────────
+
+router.get('/syllabus/:grade_id', async (req, res) => {
+  try {
+    const [units] = await db.query(
+      'SELECT * FROM syllabus_units WHERE school_id=? AND grade_id=? ORDER BY unit_number',
+      [req.user.school_id, req.params.grade_id]
+    );
+    res.json(units);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+router.post('/syllabus', async (req, res) => {
+  try {
+    const { grade_id, unit_number, unit_name, description, outcomes, weightage, pdf_data } = req.body;
+    if (!grade_id || !unit_name) return res.status(400).json({ error: 'grade_id and unit_name required' });
+    const id = uuidv4();
+    await db.query(
+      'INSERT INTO syllabus_units (id,school_id,grade_id,unit_number,unit_name,description,outcomes,weightage,pdf_data) VALUES (?,?,?,?,?,?,?,?,?)',
+      [id, req.user.school_id, grade_id, unit_number||1, unit_name, description||'', outcomes||'', weightage||0, pdf_data||null]
+    );
+    const [[unit]] = await db.query('SELECT * FROM syllabus_units WHERE id=?', [id]);
+    res.status(201).json(unit);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+router.put('/syllabus/:id', async (req, res) => {
+  try {
+    const { unit_number, unit_name, description, outcomes, weightage, pdf_data } = req.body;
+    await db.query(
+      'UPDATE syllabus_units SET unit_number=?,unit_name=?,description=?,outcomes=?,weightage=?,pdf_data=? WHERE id=? AND school_id=?',
+      [unit_number, unit_name, description||'', outcomes||'', weightage||0, pdf_data??null, req.params.id, req.user.school_id]
+    );
+    const [[unit]] = await db.query('SELECT * FROM syllabus_units WHERE id=?', [req.params.id]);
+    res.json(unit);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+router.delete('/syllabus/:id', async (req, res) => {
+  try {
+    await db.query('DELETE FROM syllabus_units WHERE id=? AND school_id=?', [req.params.id, req.user.school_id]);
+    res.json({ success: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+// ── AI Student Prediction ──────────────────────────────────────────────────────
+
+router.get('/students/:id/ai-prediction', async (req, res) => {
+  try {
+    const schoolId = req.user.school_id;
+    const studentId = req.params.id;
+
+    const [[student]] = await db.query(
+      `SELECT s.*, g.name AS grade_name, g.id AS grade_id, sec.name AS section_name
+       FROM students s
+       LEFT JOIN grades g ON s.grade_id = g.id
+       LEFT JOIN sections sec ON s.section_id = sec.id
+       WHERE s.id=? AND s.school_id=?`,
+      [studentId, schoolId]
+    );
+    if (!student) return res.status(404).json({ error: 'Student not found' });
+
+    const [[school]] = await db.query('SELECT name FROM schools WHERE id=?', [schoolId]);
+
+    // Student marks with subject + exam info
+    const [marks] = await db.query(
+      `SELECT m.obtained_marks, m.total_marks, m.grade,
+              e.name AS exam_name, e.start_date, e.type AS exam_type, e.unit_id,
+              sub.name AS subject_name
+       FROM marks m
+       LEFT JOIN exams e ON m.exam_id = e.id
+       LEFT JOIN subjects sub ON m.subject_id = sub.id
+       WHERE m.student_id=? AND m.school_id=?
+       ORDER BY e.start_date ASC`,
+      [studentId, schoolId]
+    );
+
+    // Class average per exam
+    const [classAvg] = await db.query(
+      `SELECT e.id AS exam_id, e.name AS exam_name, sub.name AS subject_name,
+              AVG(m.obtained_marks/m.total_marks*100) AS class_avg,
+              COUNT(DISTINCT m.student_id) AS student_count
+       FROM marks m
+       LEFT JOIN exams e ON m.exam_id = e.id
+       LEFT JOIN subjects sub ON m.subject_id = sub.id
+       WHERE m.school_id=? AND e.grade_id=?
+       GROUP BY e.id, sub.id`,
+      [schoolId, student.grade_id]
+    );
+    const avgMap = Object.fromEntries(
+      classAvg.map(r => [`${r.exam_id}|${r.subject_name}`, Number(r.class_avg).toFixed(1)])
+    );
+
+    // Syllabus units for this grade
+    const [units] = await db.query(
+      'SELECT id, unit_number, unit_name, weightage, outcomes FROM syllabus_units WHERE school_id=? AND grade_id=? ORDER BY unit_number',
+      [schoolId, student.grade_id]
+    );
+
+    if (!marks.length) {
+      return res.status(400).json({ error: 'Not enough exam data to generate prediction. Add exam marks first.' });
+    }
+
+    const token = process.env.GITHUB_TOKEN;
+    if (!token || token === 'PASTE_YOUR_NEW_TOKEN_HERE') {
+      return res.status(503).json({ error: 'AI service not configured. Add GITHUB_TOKEN to server .env' });
+    }
+
+    // Build prompt
+    const marksText = marks.map(m => {
+      const pct = m.total_marks > 0 ? ((m.obtained_marks / m.total_marks) * 100).toFixed(1) : 'N/A';
+      const avg = avgMap[`${m.exam_id || ''}|${m.subject_name}`] || 'N/A';
+      const unit = units.find(u => u.id === m.unit_id);
+      return `  - ${m.exam_name || 'Exam'} | ${m.subject_name || 'Subject'}: ${m.obtained_marks}/${m.total_marks} (${pct}%) | Class avg: ${avg}%${unit ? ` | Unit: ${unit.unit_name}` : ''}`;
+    }).join('\n');
+
+    const unitsText = units.length
+      ? units.map(u => `  Unit ${u.unit_number}: ${u.unit_name} | Weightage: ${u.weightage}%${u.outcomes ? ` | Outcomes: ${u.outcomes}` : ''}`).join('\n')
+      : '  No syllabus units defined yet.';
+
+    const coveredUnitIds = new Set(marks.map(m => m.unit_id).filter(Boolean));
+    const upcomingUnits = units.filter(u => !coveredUnitIds.has(u.id));
+    const upcomingText = upcomingUnits.length
+      ? upcomingUnits.map(u => `  Unit ${u.unit_number}: ${u.unit_name} (Weightage: ${u.weightage}%)`).join('\n')
+      : '  All units have been examined.';
+
+    const prompt = `You are an AI academic advisor for a school management system. Analyze this student's performance data and give a helpful, actionable prediction report.
+
+STUDENT: ${student.name}
+GRADE: ${student.grade_name}${student.section_name ? ' - ' + student.section_name : ''}
+SCHOOL: ${school?.name || 'Unknown'}
+
+FULL SYLLABUS (all units):
+${unitsText}
+
+UPCOMING / NOT YET EXAMINED UNITS:
+${upcomingText}
+
+EXAM PERFORMANCE HISTORY:
+${marksText}
+
+Based on this data, provide a concise prediction report with these 4 sections:
+
+**PERFORMANCE SUMMARY**
+2-3 sentences on overall standing and trend.
+
+**AT-RISK AREAS**
+Which upcoming units/topics need extra attention based on foundational weaknesses shown in past exams. Be specific about WHY (e.g., if student struggled in basics, harder units will be tougher). Mention weightage impact.
+
+**SCORE PREDICTIONS**
+For the next 2-3 exams/units, predict a likely score range (e.g., 60-70%) with reasoning.
+
+**RECOMMENDATIONS**
+3-4 specific, actionable study tips tailored to this student's weak areas.
+
+Keep the tone encouraging. Use plain language suitable for students, teachers and parents. Be concise.`;
+
+    const aiRes = await fetch('https://models.inference.ai.azure.com/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 900,
+        temperature: 0.7,
+      }),
+    });
+
+    if (!aiRes.ok) {
+      const errText = await aiRes.text();
+      console.error('AI API error:', errText);
+      return res.status(502).json({ error: 'AI service error. Check GITHUB_TOKEN.' });
+    }
+
+    const aiData = await aiRes.json();
+    const prediction = aiData.choices?.[0]?.message?.content || 'No prediction generated.';
+
+    res.json({
+      student: { name: student.name, grade: student.grade_name, section: student.section_name },
+      prediction,
+      generated_at: new Date().toISOString(),
+      exam_count: marks.length,
+      unit_count: units.length,
+    });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 

@@ -19,6 +19,7 @@ export default function ManageSchools() {
   const initialForm = {
     name: '', address: '', city: '', state: '', phone: '', email: '',
     subdomain: '', rate_per_student: 250, payment_methods: ['online', 'cash'], razorpay_account_id: '',
+    attendance_mode: 'teacher_marking',
     admin_name: '', admin_email: '', admin_password: 'school123',
   };
   const [form, setForm] = useState(initialForm);
@@ -234,6 +235,32 @@ export default function ManageSchools() {
                     <label className="form-label">Razorpay Account ID</label>
                     <input className="form-input" value={form.razorpay_account_id}
                       onChange={e => setForm({ ...form, razorpay_account_id: e.target.value })} placeholder="acc_..." />
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ marginTop: '4px' }}>
+                  <label className="form-label">Attendance Mode</label>
+                  <div style={{ display: 'flex', gap: '12px', marginTop: '6px' }}>
+                    {[
+                      { value: 'teacher_marking', label: 'Teacher Marking', desc: 'Teachers mark students manually; QR for staff only' },
+                      { value: 'qr_scanner',      label: 'QR Scanner',      desc: 'All attendance via webcam QR scan' },
+                    ].map(opt => (
+                      <label key={opt.value} style={{
+                        flex: 1, padding: '10px 12px', borderRadius: '10px', cursor: 'pointer',
+                        background: form.attendance_mode === opt.value ? 'var(--accent-soft)' : 'var(--bg-input)',
+                        border: `1px solid ${form.attendance_mode === opt.value ? 'var(--accent-primary)' : 'var(--border-primary)'}`,
+                        display: 'flex', alignItems: 'flex-start', gap: '8px',
+                      }}>
+                        <input type="radio" name="attendance_mode" value={opt.value}
+                          checked={form.attendance_mode === opt.value}
+                          onChange={e => setForm({ ...form, attendance_mode: e.target.value })}
+                          style={{ marginTop: '3px', accentColor: 'var(--accent-primary)' }} />
+                        <div>
+                          <div style={{ fontSize: '12px', fontWeight: 700 }}>{opt.label}</div>
+                          <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>{opt.desc}</div>
+                        </div>
+                      </label>
+                    ))}
                   </div>
                 </div>
 

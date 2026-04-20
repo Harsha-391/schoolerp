@@ -88,19 +88,21 @@ router.get('/schools', async (_req, res) => {
 router.post('/schools', async (req, res) => {
   try {
     const { name, address, city, state, phone, email, subdomain, rate_per_student,
-            payment_methods, admin_name, admin_email, admin_password, razorpay_account_id } = req.body;
+            payment_methods, admin_name, admin_email, admin_password, razorpay_account_id,
+            attendance_mode } = req.body;
 
     const [[existing]] = await db.query('SELECT id FROM schools WHERE subdomain = ?', [subdomain]);
     if (existing) return res.status(400).json({ error: 'Subdomain already in use' });
 
     const schoolId = uuidv4();
     await db.query(
-      `INSERT INTO schools (id,name,address,city,state,phone,email,logo,subdomain,rate_per_student,payment_methods,razorpay_account_id,is_active,created_at)
-       VALUES (?,?,?,?,?,?,?,NULL,?,?,?,?,1,NOW())`,
+      `INSERT INTO schools (id,name,address,city,state,phone,email,logo,subdomain,rate_per_student,payment_methods,razorpay_account_id,attendance_mode,is_active,created_at)
+       VALUES (?,?,?,?,?,?,?,NULL,?,?,?,?,?,1,NOW())`,
       [schoolId, name, address||'', city||'', state||'', phone||'', email||'',
        subdomain, rate_per_student||200,
        JSON.stringify(payment_methods || ['online','cash']),
-       razorpay_account_id||null]
+       razorpay_account_id||null,
+       attendance_mode||'teacher_marking']
     );
 
     if (admin_email && admin_password) {
@@ -142,7 +144,7 @@ router.put('/schools/:id', async (req, res) => {
     if (payment_methods) updates.payment_methods = JSON.stringify(payment_methods);
 
     const fields = ['name','address','city','state','phone','email','subdomain',
-                    'rate_per_student','payment_methods','razorpay_account_id','is_active'];
+                    'rate_per_student','payment_methods','razorpay_account_id','is_active','attendance_mode'];
     const toSet = Object.fromEntries(Object.entries(updates).filter(([k]) => fields.includes(k)));
 
     if (Object.keys(toSet).length > 0) {

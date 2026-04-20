@@ -3,7 +3,7 @@ import Layout from '../../components/Layout';
 import api from '../../utils/api';
 import IDCard from '../../components/IDCard';
 import { useAuth } from '../../context/AuthContext';
-import { Plus, X, GraduationCap, Phone, CreditCard, Upload, ChevronDown } from 'lucide-react';
+import { Plus, X, GraduationCap, Phone, CreditCard, Upload, ChevronDown, Trash2, Sparkles } from 'lucide-react';
 import { SkManagementPage } from '../../components/Skeleton';
 
 function compressImage(file, maxWidth = 300) {
@@ -33,6 +33,8 @@ export default function StudentManagement() {
   const [showModal,     setShowModal]     = useState(false);
   const [showProfile,   setShowProfile]   = useState(null);
   const [idCardTarget,  setIdCardTarget]  = useState(null);
+  const [deleteTarget,  setDeleteTarget]  = useState(null);
+  const [deleting,      setDeleting]      = useState(false);
   const [loading,       setLoading]       = useState(true);
   const [avatarPreview, setAvatarPreview] = useState('');
   const [form, setForm] = useState({
@@ -84,6 +86,17 @@ export default function StudentManagement() {
     api.get(`/admin/students/${studentId}`).then(res => setShowProfile(res.data));
   };
 
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await api.delete(`/admin/students/${deleteTarget.id}`);
+      setDeleteTarget(null);
+      loadStudents(selectedGrade);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to delete');
+    } finally { setDeleting(false); }
+  };
+
   if (loading) return <Layout title="Student Management"><SkManagementPage cols={4} rows={8} hasSearch /></Layout>;
 
   return (
@@ -118,18 +131,35 @@ export default function StudentManagement() {
           </div>
         ) : students.map(s => (
           <div key={s.id} className="list-item" style={{ padding: '14px 16px' }}>
-            {/* Avatar */}
-            {s.avatar
-              ? <img src={s.avatar} alt={s.name} style={{ width: '42px', height: '42px', borderRadius: '10px', objectFit: 'cover', flexShrink: 0 }} />
-              : <div style={{
-                  width: '42px', height: '42px', borderRadius: '10px', flexShrink: 0,
-                  background: 'var(--accent-soft)', color: 'var(--accent-primary)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '15px', fontWeight: 700,
-                }}>
-                  {s.name?.charAt(0)}
-                </div>
-            }
+            {/* Avatar — click to change photo */}
+            <label title="Click to change photo" style={{ cursor: 'pointer', flexShrink: 0, position: 'relative' }}>
+              {s.avatar
+                ? <img src={s.avatar} alt={s.name} style={{ width: '42px', height: '42px', borderRadius: '10px', objectFit: 'cover', display: 'block' }} />
+                : <div style={{
+                    width: '42px', height: '42px', borderRadius: '10px',
+                    background: 'var(--accent-soft)', color: 'var(--accent-primary)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '15px', fontWeight: 700,
+                  }}>
+                    {s.name?.charAt(0)}
+                  </div>
+              }
+              <div style={{
+                position: 'absolute', inset: 0, borderRadius: '10px',
+                background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                opacity: 0, transition: 'opacity 0.15s', pointerEvents: 'none',
+              }} onMouseEnter={e => e.currentTarget.style.opacity = 1} onMouseLeave={e => e.currentTarget.style.opacity = 0}>
+                <Upload size={12} color="#fff" />
+              </div>
+              <input type="file" accept="image/*" style={{ display: 'none' }}
+                onChange={async (e) => {
+                  const file = e.target.files[0];
+                  if (!file) return;
+                  const dataUrl = await compressImage(file);
+                  await api.put(`/admin/students/${s.id}/avatar`, { avatar: dataUrl });
+                  loadStudents(selectedGrade);
+                }} />
+            </label>
 
             {/* Content */}
             <div className="list-item-content">
@@ -163,6 +193,11 @@ export default function StudentManagement() {
               <button className="btn btn-sm btn-secondary" onClick={() => setIdCardTarget(s)}
                 title="ID Card" style={{ padding: '6px 10px' }}>
                 <CreditCard size={13} />
+              </button>
+              <button className="btn btn-sm" onClick={() => setDeleteTarget(s)}
+                title="Delete student"
+                style={{ padding: '6px 10px', background: 'rgba(239,68,68,0.1)', color: 'var(--error)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                <Trash2 size={13} />
               </button>
             </div>
           </div>
@@ -269,6 +304,9 @@ export default function StudentManagement() {
                   </div>
                 </div>
               )}
+
+              {/* AI Prediction */}
+              <AIPrediction studentId={showProfile.id} />
 
               <div style={{ marginTop: '16px' }}>
                 <button className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
@@ -412,6 +450,100 @@ export default function StudentManagement() {
           onClose={() => setIdCardTarget(null)}
         />
       )}
+
+      {/* ── Delete Confirm Modal ── */}
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px' }}>
+            <div className="modal-header">
+              <div className="modal-title" style={{ color: 'var(--error)' }}>Delete Student</div>
+              <button className="modal-close" onClick={() => setDeleteTarget(null)}><X size={16} /></button>
+            </div>
+            <div className="modal-body">
+              <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '10px', padding: '12px 14px', fontSize: '13px', color: 'var(--error)' }}>
+                This will permanently delete <strong>{deleteTarget.name}</strong> ({deleteTarget.roll_number}) and all their attendance, marks, fee, and login records. This cannot be undone.
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setDeleteTarget(null)}>Cancel</button>
+              <button
+                className="btn"
+                disabled={deleting}
+                onClick={handleDelete}
+                style={{ background: 'var(--error)', color: '#fff' }}
+              >
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
+  );
+}
+
+function AIPrediction({ studentId }) {
+  const [state,      setState]      = useState('idle'); // idle | loading | done | error
+  const [prediction, setPrediction] = useState(null);
+  const [error,      setError]      = useState('');
+
+  const run = async () => {
+    setState('loading');
+    setError('');
+    try {
+      const res = await api.get(`/admin/students/${studentId}/ai-prediction`);
+      setPrediction(res.data);
+      setState('done');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to generate prediction');
+      setState('error');
+    }
+  };
+
+  const formatPrediction = (text) =>
+    text.split('\n').map((line, i) => {
+      if (line.startsWith('**') && line.endsWith('**'))
+        return <div key={i} style={{ fontWeight: 700, fontSize: '13px', color: 'var(--accent-primary)', marginTop: i > 0 ? '14px' : 0, marginBottom: '4px' }}>{line.replace(/\*\*/g, '')}</div>;
+      if (line.trim() === '') return null;
+      return <div key={i} style={{ fontSize: '12px', lineHeight: 1.6, color: 'var(--text-secondary)', marginBottom: '3px' }}>{line.replace(/^\*+\s?/, '• ')}</div>;
+    });
+
+  return (
+    <div style={{ marginTop: '20px', padding: '14px', background: 'var(--bg-input)', borderRadius: '12px', border: '1px solid var(--border-primary)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: state === 'done' ? '12px' : 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Sparkles size={15} color="var(--accent-primary)" />
+          <span style={{ fontWeight: 700, fontSize: '13px' }}>AI Performance Prediction</span>
+        </div>
+        {state !== 'loading' && (
+          <button className="btn btn-sm btn-secondary" onClick={run} style={{ fontSize: '11px', padding: '5px 12px' }}>
+            {state === 'done' ? 'Refresh' : 'Generate'}
+          </button>
+        )}
+      </div>
+
+      {state === 'idle' && (
+        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
+          Click Generate to get an AI-powered prediction based on exam history and syllabus weightage.
+        </div>
+      )}
+      {state === 'loading' && (
+        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ width: '14px', height: '14px', border: '2px solid var(--accent-primary)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+          Analyzing exam data and syllabus…
+        </div>
+      )}
+      {state === 'error' && (
+        <div style={{ fontSize: '12px', color: 'var(--error)', marginTop: '8px' }}>{error}</div>
+      )}
+      {state === 'done' && prediction && (
+        <div>
+          <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '10px' }}>
+            Based on {prediction.exam_count} exam(s) · {prediction.unit_count} syllabus unit(s) · Generated {new Date(prediction.generated_at).toLocaleTimeString()}
+          </div>
+          {formatPrediction(prediction.prediction)}
+        </div>
+      )}
+    </div>
   );
 }
