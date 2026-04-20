@@ -16,11 +16,12 @@ api.interceptors.request.use(config => {
   return config;
 });
 
-// Handle 401 errors
+// Handle 401 errors — but not for auth endpoints (login failures shouldn't redirect)
 api.interceptors.response.use(
   response => response,
   error => {
-    if (error.response?.status === 401) {
+    const url = error.config?.url || '';
+    if (error.response?.status === 401 && !url.includes('/auth/')) {
       localStorage.removeItem('erp_token');
       localStorage.removeItem('erp_user');
       window.location.href = '/login';

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Acadmay</string>
+    <string name="title_activity_main">Acadmay</string>
+    <string name="package_name">in.acadmay.app</string>
+    <string name="custom_url_scheme">in.acadmay.app</string>
+</resources>

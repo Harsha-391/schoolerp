@@ -1,73 +1,107 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Layout from '../../components/Layout';
 import api from '../../utils/api';
-import { QrCode, CheckCircle, Clock } from 'lucide-react';
+import { QrCode, CheckCircle, Clock, RefreshCw } from 'lucide-react';
 
 export default function QRAttendance() {
-  const [qrData, setQrData] = useState(null);
+  const [qrData,  setQrData]  = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const generateQR = async () => {
+  const generate = async () => {
     setLoading(true);
     try {
       const res = await api.get('/staff/qr-attendance');
       setQrData(res.data);
-    } catch (err) {
-      alert('Failed to generate QR');
+    } catch {
+      alert('Failed to generate QR code');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
-    <Layout title="QR Attendance" subtitle="Daily attendance via QR code">
-      <div className="page-header">
-        <h1 className="page-title">QR Attendance</h1>
-      </div>
+    <Layout title="QR Attendance" subtitle="Daily attendance via QR">
+      <div style={{ maxWidth: '420px', margin: '0 auto' }}>
+        <div className="card">
+          <div className="card-body" style={{ padding: '32px 24px', textAlign: 'center' }}>
 
-      <div className="card" style={{ maxWidth: '480px', margin: '0 auto' }}>
-        <div className="card-body">
-          <div className="qr-container">
-            {qrData ? (
+            {!qrData ? (
               <>
-                <img src={qrData.qr_image} alt="Attendance QR" className="qr-code-img" />
-                <div className="qr-date">
-                  <Calendar size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} />
-                  {qrData.date}
+                <div style={{
+                  width: '80px', height: '80px', borderRadius: '20px',
+                  background: 'var(--accent-soft)', color: 'var(--accent-primary)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  margin: '0 auto 20px',
+                }}>
+                  <QrCode size={36} />
                 </div>
-                <div className="qr-status" style={{ color: qrData.already_marked ? 'var(--warning)' : 'var(--success)' }}>
-                  {qrData.already_marked ? (
-                    <><Clock size={14} style={{ verticalAlign: 'middle', marginRight: '4px' }} /> Already marked for today</>
-                  ) : (
-                    <><CheckCircle size={14} style={{ verticalAlign: 'middle', marginRight: '4px' }} /> Attendance marked successfully!</>
-                  )}
-                </div>
+                <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '8px' }}>Generate QR Code</h3>
+                <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '28px', lineHeight: 1.6 }}>
+                  Generate your daily attendance QR code. Students scan it to mark your attendance.
+                </p>
               </>
             ) : (
-              <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                <div style={{ width: '80px', height: '80px', borderRadius: '20px', background: 'rgba(99,102,241,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-                  <QrCode size={36} style={{ color: 'var(--accent-primary)' }} />
+              <>
+                {/* Status banner */}
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '8px',
+                  padding: '8px 16px', borderRadius: 'var(--radius-full)',
+                  background: qrData.already_marked ? 'var(--warning-light)' : 'var(--success-light)',
+                  border: `1px solid ${qrData.already_marked ? 'var(--warning-border)' : 'var(--success-border)'}`,
+                  color: qrData.already_marked ? 'var(--warning)' : 'var(--success)',
+                  fontSize: '13px', fontWeight: 600, marginBottom: '24px',
+                }}>
+                  {qrData.already_marked
+                    ? <><Clock size={14} /> Already marked today</>
+                    : <><CheckCircle size={14} /> Attendance marked!</>
+                  }
                 </div>
-                <h3 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '8px' }}>Generate Your QR Code</h3>
-                <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '24px' }}>
-                  Click below to generate your daily attendance QR code
-                </p>
-              </div>
+
+                {/* QR image */}
+                <div style={{
+                  width: '220px', height: '220px', margin: '0 auto 16px',
+                  borderRadius: 'var(--radius-lg)',
+                  border: '3px solid var(--border-primary)',
+                  background: 'white', padding: '12px',
+                  boxShadow: 'var(--shadow-md)',
+                  overflow: 'hidden',
+                }}>
+                  <img src={qrData.qr_image} alt="Attendance QR" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                </div>
+
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500, marginBottom: '24px' }}>
+                  {qrData.date}
+                </div>
+              </>
             )}
-            <button className="btn btn-primary btn-lg" onClick={generateQR} disabled={loading} style={{ marginTop: '20px', width: '100%' }}>
-              <QrCode size={18} />
-              {loading ? 'Generating...' : qrData ? 'Regenerate QR' : 'Generate QR Code'}
+
+            <button
+              className="btn btn-primary btn-lg"
+              onClick={generate}
+              disabled={loading}
+              style={{ width: '100%' }}
+            >
+              {loading
+                ? <><RefreshCw size={16} style={{ animation: 'spin 1s linear infinite' }} /> Generating…</>
+                : qrData
+                  ? <><RefreshCw size={16} /> Refresh QR</>
+                  : <><QrCode size={18} /> Generate QR Code</>
+              }
             </button>
           </div>
         </div>
-      </div>
-    </Layout>
-  );
-}
 
-function Calendar({ size, style }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style}>
-      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
-    </svg>
+        <div style={{
+          marginTop: '16px', padding: '14px 18px',
+          background: 'var(--info-light)', border: '1px solid var(--info-border)',
+          borderRadius: 'var(--radius-md)',
+          fontSize: '13px', color: '#1e40af', lineHeight: 1.6,
+        }}>
+          💡 Show this QR code to be scanned — it logs your attendance for today. QR refreshes daily.
+        </div>
+      </div>
+
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+    </Layout>
   );
 }
