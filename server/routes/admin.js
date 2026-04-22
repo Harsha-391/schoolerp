@@ -3,6 +3,8 @@ import { v4 as uuidv4 } from 'uuid';
 import bcryptjs from 'bcryptjs';
 import db from '../config/db.js';
 import { authMiddleware, roleMiddleware } from '../middleware/auth.js';
+import { createRequire } from 'module';
+const pdfParse = createRequire(import.meta.url)('pdf-parse');
 
 const router = Router();
 router.use(authMiddleware, roleMiddleware('school_admin'));
@@ -388,9 +390,17 @@ router.post('/exams', async (req, res) => {
   try {
     const id = uuidv4();
     const { name, type, start_date, end_date, grade_id } = req.body;
+    const schoolId = req.user.school_id;
+
+    if (!name || !grade_id) return res.status(400).json({ error: 'name and grade_id are required' });
+
+    // Verify grade belongs to this school (IDOR guard)
+    const [[grade]] = await db.query('SELECT id FROM grades WHERE id = ? AND school_id = ?', [grade_id, schoolId]);
+    if (!grade) return res.status(404).json({ error: 'Grade not found' });
+
     await db.query(
       'INSERT INTO exams (id,school_id,name,type,start_date,end_date,grade_id) VALUES (?,?,?,?,?,?,?)',
-      [id, req.user.school_id, name, type, start_date, end_date, grade_id]
+      [id, schoolId, name, type, start_date, end_date, grade_id]
     );
     const [[row]] = await db.query('SELECT * FROM exams WHERE id = ?', [id]);
     res.status(201).json(row);
@@ -408,7 +418,24 @@ router.delete('/exams/:id', async (req, res) => {
 router.post('/marks', async (req, res) => {
   try {
     const { student_id, exam_id, subject_id, obtained_marks, total_marks } = req.body;
-    const pct = (obtained_marks / total_marks) * 100;
+    const schoolId = req.user.school_id;
+
+    if (!student_id || !exam_id || !subject_id || obtained_marks == null || !total_marks) {
+      return res.status(400).json({ error: 'student_id, exam_id, subject_id, obtained_marks, and total_marks are required' });
+    }
+    if (Number(total_marks) <= 0 || Number(obtained_marks) < 0 || Number(obtained_marks) > Number(total_marks)) {
+      return res.status(400).json({ error: 'Invalid marks: obtained_marks must be between 0 and total_marks' });
+    }
+
+    // Verify student belongs to this admin's school (IDOR guard)
+    const [[student]] = await db.query('SELECT id FROM students WHERE id = ? AND school_id = ?', [student_id, schoolId]);
+    if (!student) return res.status(404).json({ error: 'Student not found' });
+
+    // Verify exam belongs to this school
+    const [[exam]] = await db.query('SELECT id FROM exams WHERE id = ? AND school_id = ?', [exam_id, schoolId]);
+    if (!exam) return res.status(404).json({ error: 'Exam not found' });
+
+    const pct = (Number(obtained_marks) / Number(total_marks)) * 100;
     let grade = 'D';
     if (pct >= 90) grade = 'A+';
     else if (pct >= 80) grade = 'A';
@@ -418,7 +445,7 @@ router.post('/marks', async (req, res) => {
     const id = uuidv4();
     await db.query(
       'INSERT INTO marks (id,student_id,school_id,exam_id,subject_id,obtained_marks,total_marks,grade) VALUES (?,?,?,?,?,?,?,?)',
-      [id, student_id, req.user.school_id, exam_id, subject_id, obtained_marks, total_marks, grade]
+      [id, student_id, schoolId, exam_id, subject_id, Number(obtained_marks), Number(total_marks), grade]
     );
     const [[row]] = await db.query('SELECT * FROM marks WHERE id = ?', [id]);
     res.status(201).json(row);
@@ -736,10 +763,21 @@ router.post('/qr/scan', async (req, res) => {
 
 // ── Syllabus / Curriculum ──────────────────────────────────────────────────────
 
+router.post('/syllabus/extract-pdf', async (req, res) => {
+  try {
+    const { pdf_base64 } = req.body;
+    if (!pdf_base64) return res.status(400).json({ error: 'pdf_base64 required' });
+    const base64Data = pdf_base64.replace(/^data:application\/pdf;base64,/, '');
+    const buffer = Buffer.from(base64Data, 'base64');
+    const data = await pdfParse(buffer);
+    res.json({ text: data.text.trim(), pages: data.numpages, chars: data.text.length });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Failed to extract PDF text' }); }
+});
+
 router.get('/syllabus/:grade_id', async (req, res) => {
   try {
     const [units] = await db.query(
-      'SELECT * FROM syllabus_units WHERE school_id=? AND grade_id=? ORDER BY unit_number',
+      'SELECT id,school_id,grade_id,unit_number,unit_name,description,outcomes,weightage,pdf_url,(pdf_text IS NOT NULL AND pdf_text != "") AS has_pdf_text FROM syllabus_units WHERE school_id=? AND grade_id=? ORDER BY unit_number',
       [req.user.school_id, req.params.grade_id]
     );
     res.json(units);
@@ -748,26 +786,34 @@ router.get('/syllabus/:grade_id', async (req, res) => {
 
 router.post('/syllabus', async (req, res) => {
   try {
-    const { grade_id, unit_number, unit_name, description, outcomes, weightage, pdf_data } = req.body;
+    const { grade_id, unit_number, unit_name, description, outcomes, weightage, pdf_url, pdf_text } = req.body;
     if (!grade_id || !unit_name) return res.status(400).json({ error: 'grade_id and unit_name required' });
     const id = uuidv4();
     await db.query(
-      'INSERT INTO syllabus_units (id,school_id,grade_id,unit_number,unit_name,description,outcomes,weightage,pdf_data) VALUES (?,?,?,?,?,?,?,?,?)',
-      [id, req.user.school_id, grade_id, unit_number||1, unit_name, description||'', outcomes||'', weightage||0, pdf_data||null]
+      'INSERT INTO syllabus_units (id,school_id,grade_id,unit_number,unit_name,description,outcomes,weightage,pdf_url,pdf_text) VALUES (?,?,?,?,?,?,?,?,?,?)',
+      [id, req.user.school_id, grade_id, unit_number||1, unit_name, description||'', outcomes||'', weightage||0, pdf_url||null, pdf_text||null]
     );
-    const [[unit]] = await db.query('SELECT * FROM syllabus_units WHERE id=?', [id]);
+    const [[unit]] = await db.query('SELECT id,school_id,grade_id,unit_number,unit_name,description,outcomes,weightage,pdf_url,(pdf_text IS NOT NULL AND pdf_text != "") AS has_pdf_text FROM syllabus_units WHERE id=?', [id]);
     res.status(201).json(unit);
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 router.put('/syllabus/:id', async (req, res) => {
   try {
-    const { unit_number, unit_name, description, outcomes, weightage, pdf_data } = req.body;
-    await db.query(
-      'UPDATE syllabus_units SET unit_number=?,unit_name=?,description=?,outcomes=?,weightage=?,pdf_data=? WHERE id=? AND school_id=?',
-      [unit_number, unit_name, description||'', outcomes||'', weightage||0, pdf_data??null, req.params.id, req.user.school_id]
-    );
-    const [[unit]] = await db.query('SELECT * FROM syllabus_units WHERE id=?', [req.params.id]);
+    const { unit_number, unit_name, description, outcomes, weightage, pdf_url, pdf_text } = req.body;
+    // Only update pdf_text if explicitly provided (new upload); omit to preserve existing
+    if (pdf_text !== undefined && pdf_text !== null && pdf_text !== '') {
+      await db.query(
+        'UPDATE syllabus_units SET unit_number=?,unit_name=?,description=?,outcomes=?,weightage=?,pdf_url=?,pdf_text=? WHERE id=? AND school_id=?',
+        [unit_number, unit_name, description||'', outcomes||'', weightage||0, pdf_url??null, pdf_text, req.params.id, req.user.school_id]
+      );
+    } else {
+      await db.query(
+        'UPDATE syllabus_units SET unit_number=?,unit_name=?,description=?,outcomes=?,weightage=?,pdf_url=? WHERE id=? AND school_id=?',
+        [unit_number, unit_name, description||'', outcomes||'', weightage||0, pdf_url??null, req.params.id, req.user.school_id]
+      );
+    }
+    const [[unit]] = await db.query('SELECT id,school_id,grade_id,unit_number,unit_name,description,outcomes,weightage,pdf_url,(pdf_text IS NOT NULL AND pdf_text != "") AS has_pdf_text FROM syllabus_units WHERE id=?', [req.params.id]);
     res.json(unit);
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
@@ -827,9 +873,9 @@ router.get('/students/:id/ai-prediction', async (req, res) => {
       classAvg.map(r => [`${r.exam_id}|${r.subject_name}`, Number(r.class_avg).toFixed(1)])
     );
 
-    // Syllabus units for this grade
+    // Syllabus units for this grade (include pdf_text for RAG)
     const [units] = await db.query(
-      'SELECT id, unit_number, unit_name, weightage, outcomes FROM syllabus_units WHERE school_id=? AND grade_id=? ORDER BY unit_number',
+      'SELECT id, unit_number, unit_name, weightage, outcomes, pdf_text FROM syllabus_units WHERE school_id=? AND grade_id=? ORDER BY unit_number',
       [schoolId, student.grade_id]
     );
 
@@ -851,7 +897,15 @@ router.get('/students/:id/ai-prediction', async (req, res) => {
     }).join('\n');
 
     const unitsText = units.length
-      ? units.map(u => `  Unit ${u.unit_number}: ${u.unit_name} | Weightage: ${u.weightage}%${u.outcomes ? ` | Outcomes: ${u.outcomes}` : ''}`).join('\n')
+      ? units.map(u => {
+          let line = `  Unit ${u.unit_number}: ${u.unit_name} | Weightage: ${u.weightage}%${u.outcomes ? ` | Outcomes: ${u.outcomes}` : ''}`;
+          if (u.pdf_text) {
+            // Include first 800 chars of PDF content per unit to keep prompt size manageable
+            const snippet = u.pdf_text.replace(/\s+/g, ' ').trim().slice(0, 800);
+            line += `\n    [Syllabus Content: ${snippet}${u.pdf_text.length > 800 ? '…' : ''}]`;
+          }
+          return line;
+        }).join('\n')
       : '  No syllabus units defined yet.';
 
     const coveredUnitIds = new Set(marks.map(m => m.unit_id).filter(Boolean));

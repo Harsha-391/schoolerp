@@ -58,12 +58,24 @@ router.post('/submit', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'fee_structure_id, amount, and payment_method_id required' });
     }
 
-    const [[fee]] = await db.query('SELECT * FROM fees_structure WHERE id = ?', [fee_structure_id]);
+    const submittedAmount = Number(amount);
+    if (!Number.isFinite(submittedAmount) || submittedAmount <= 0) {
+      return res.status(400).json({ error: 'amount must be a positive number' });
+    }
+
+    // Verify fee structure belongs to the student's school (IDOR guard)
+    const [[fee]] = await db.query('SELECT * FROM fees_structure WHERE id = ? AND school_id = ?', [fee_structure_id, schoolId]);
     if (!fee) return res.status(404).json({ error: 'Fee structure not found' });
 
+    // Amount must match the fee structure exactly — prevents submitting partial amounts
+    if (submittedAmount !== Number(fee.amount)) {
+      return res.status(400).json({ error: `Amount must be exactly ₹${fee.amount} as per the fee structure` });
+    }
+
+    // Verify payment method belongs to the student's school (IDOR guard)
     const [[paymentMethod]] = await db.query(
-      'SELECT * FROM school_payment_config WHERE id = ?',
-      [payment_method_id]
+      'SELECT * FROM school_payment_config WHERE id = ? AND school_id = ? AND is_active = 1',
+      [payment_method_id, schoolId]
     );
     if (!paymentMethod) return res.status(404).json({ error: 'Payment method not found' });
 
@@ -119,7 +131,7 @@ router.get('/my-requests', authMiddleware, async (req, res) => {
 // =============================================
 
 // GET /api/payments/admin/pending — Get pending payment requests
-router.get('/admin/pending', authMiddleware, roleMiddleware(['school_admin']), async (req, res) => {
+router.get('/admin/pending', authMiddleware, roleMiddleware('school_admin'), async (req, res) => {
   try {
     const [requests] = await db.query(
       `SELECT * FROM payment_requests
@@ -135,7 +147,7 @@ router.get('/admin/pending', authMiddleware, roleMiddleware(['school_admin']), a
 });
 
 // GET /api/payments/admin/all — Get all payment requests
-router.get('/admin/all', authMiddleware, roleMiddleware(['school_admin']), async (req, res) => {
+router.get('/admin/all', authMiddleware, roleMiddleware('school_admin'), async (req, res) => {
   try {
     const [requests] = await db.query(
       'SELECT * FROM payment_requests WHERE school_id = ? ORDER BY submitted_at DESC',
@@ -149,7 +161,7 @@ router.get('/admin/all', authMiddleware, roleMiddleware(['school_admin']), async
 });
 
 // PUT /api/payments/admin/verify/:id — Approve or reject a payment
-router.put('/admin/verify/:id', authMiddleware, roleMiddleware(['school_admin']), async (req, res) => {
+router.put('/admin/verify/:id', authMiddleware, roleMiddleware('school_admin'), async (req, res) => {
   try {
     const { status, reject_reason } = req.body;
 
@@ -205,7 +217,7 @@ router.put('/admin/verify/:id', authMiddleware, roleMiddleware(['school_admin'])
 });
 
 // GET /api/payments/admin/config — Get school's payment method config
-router.get('/admin/config', authMiddleware, roleMiddleware(['school_admin']), async (req, res) => {
+router.get('/admin/config', authMiddleware, roleMiddleware('school_admin'), async (req, res) => {
   try {
     const [configs] = await db.query(
       'SELECT * FROM school_payment_config WHERE school_id = ? ORDER BY is_primary DESC, id',
@@ -219,7 +231,7 @@ router.get('/admin/config', authMiddleware, roleMiddleware(['school_admin']), as
 });
 
 // POST /api/payments/admin/config — Add new payment method
-router.post('/admin/config', authMiddleware, roleMiddleware(['school_admin']), async (req, res) => {
+router.post('/admin/config', authMiddleware, roleMiddleware('school_admin'), async (req, res) => {
   try {
     const {
       method_type, label, upi_id, bank_name, account_number, ifsc_code,
@@ -253,7 +265,7 @@ router.post('/admin/config', authMiddleware, roleMiddleware(['school_admin']), a
 });
 
 // PUT /api/payments/admin/config/:id — Update payment method
-router.put('/admin/config/:id', authMiddleware, roleMiddleware(['school_admin']), async (req, res) => {
+router.put('/admin/config/:id', authMiddleware, roleMiddleware('school_admin'), async (req, res) => {
   try {
     const [[existing]] = await db.query(
       'SELECT id FROM school_payment_config WHERE id = ? AND school_id = ?',
@@ -282,7 +294,7 @@ router.put('/admin/config/:id', authMiddleware, roleMiddleware(['school_admin'])
 });
 
 // DELETE /api/payments/admin/config/:id — Deactivate payment method
-router.delete('/admin/config/:id', authMiddleware, roleMiddleware(['school_admin']), async (req, res) => {
+router.delete('/admin/config/:id', authMiddleware, roleMiddleware('school_admin'), async (req, res) => {
   try {
     const [[existing]] = await db.query(
       'SELECT id FROM school_payment_config WHERE id = ? AND school_id = ?',

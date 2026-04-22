@@ -286,19 +286,42 @@ router.post('/mark-bulk-attendance', async (req, res) => {
     const schoolId       = req.user.school_id;
     const attendanceDate = date || new Date().toISOString().split('T')[0];
 
+    if (!Array.isArray(records) || records.length === 0) {
+      return res.status(400).json({ error: 'records array is required' });
+    }
+
+    // Fetch classes this staff member is assigned to teach
+    const [assignments] = await db.query(
+      'SELECT grade_id, section_id FROM class_teacher_assignments WHERE staff_id = ? AND school_id = ?',
+      [staffId, schoolId]
+    );
+    const assignedKeys = new Set(assignments.map(a => `${a.grade_id}:${a.section_id}`));
+
     for (const r of records) {
+      // Verify student belongs to this school and to one of the staff's assigned classes
+      const [[student]] = await db.query(
+        'SELECT id, grade_id, section_id FROM students WHERE id = ? AND school_id = ?',
+        [r.student_id, schoolId]
+      );
+      if (!student) continue;
+
+      if (!assignedKeys.has(`${student.grade_id}:${student.section_id}`)) {
+        return res.status(403).json({ error: `You are not the class teacher for student ${r.student_id}` });
+      }
+
       await db.query(
         `INSERT INTO attendance_students (id,student_id,school_id,date,status,marked_by)
          VALUES (?,?,?,?,?,?)
          ON DUPLICATE KEY UPDATE status = VALUES(status)`,
-        [uuidv4(), r.student_id, schoolId, attendanceDate, r.status||'present', staffId]
+        [uuidv4(), r.student_id, schoolId, attendanceDate, r.status || 'present', staffId]
       );
     }
 
+    const studentIds = records.map(r => r.student_id);
     const [results] = await db.query(
       `SELECT * FROM attendance_students
        WHERE school_id = ? AND date = ? AND student_id IN (?)`,
-      [schoolId, attendanceDate, records.map(r => r.student_id)]
+      [schoolId, attendanceDate, studentIds]
     );
 
     res.json({ marked: results.length, records: results });

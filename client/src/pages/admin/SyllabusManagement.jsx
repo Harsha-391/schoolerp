@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Layout from '../../components/Layout';
 import api from '../../utils/api';
-import { Plus, X, Edit, Trash2, BookOpen, FileText, Upload, ChevronDown } from 'lucide-react';
+import { Plus, X, Edit, Trash2, BookOpen, FileText, ChevronDown, Upload, CheckCircle } from 'lucide-react';
 
 export default function SyllabusManagement() {
   const [grades,        setGrades]        = useState([]);
@@ -10,10 +10,12 @@ export default function SyllabusManagement() {
   const [showModal,     setShowModal]     = useState(false);
   const [editingId,     setEditingId]     = useState(null);
   const [loading,       setLoading]       = useState(false);
-  const [pdfName,       setPdfName]       = useState('');
 
-  const emptyForm = { unit_number: 1, unit_name: '', description: '', outcomes: '', weightage: '', pdf_data: '' };
+  const emptyForm = { unit_number: 1, unit_name: '', description: '', outcomes: '', weightage: '', pdf_url: '', pdf_text: '' };
   const [form, setForm] = useState(emptyForm);
+  const [pdfStatus, setPdfStatus] = useState('idle'); // idle | extracting | done | error
+  const [pdfPages, setPdfPages]   = useState(0);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     api.get('/admin/grades').then(res => {
@@ -33,19 +35,11 @@ export default function SyllabusManagement() {
       .finally(() => setLoading(false));
   };
 
-  const handlePdfUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setPdfName(file.name);
-    const reader = new FileReader();
-    reader.onload = ev => setForm(f => ({ ...f, pdf_data: ev.target.result }));
-    reader.readAsDataURL(file);
-  };
-
   const openAdd = () => {
     setForm({ ...emptyForm, unit_number: units.length + 1 });
     setEditingId(null);
-    setPdfName('');
+    setPdfStatus('idle');
+    setPdfPages(0);
     setShowModal(true);
   };
 
@@ -53,17 +47,53 @@ export default function SyllabusManagement() {
     setForm({
       unit_number: unit.unit_number, unit_name: unit.unit_name,
       description: unit.description || '', outcomes: unit.outcomes || '',
-      weightage: unit.weightage || '', pdf_data: unit.pdf_data || '',
+      weightage: unit.weightage || '', pdf_url: unit.pdf_url || '',
+      pdf_text: '', // don't load existing text into form, just preserve on save
     });
-    setPdfName(unit.pdf_data ? 'Existing PDF' : '');
     setEditingId(unit.id);
+    setPdfStatus(unit.has_pdf_text ? 'done' : 'idle');
+    setPdfPages(0);
     setShowModal(true);
   };
+
+  const handlePdfUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== 'application/pdf') {
+      alert('Please select a PDF file.');
+      return;
+    }
+    setPdfStatus('extracting');
+    try {
+      const base64 = await fileToBase64(file);
+      const res = await api.post('/admin/syllabus/extract-pdf', { pdf_base64: base64 });
+      setForm(f => ({ ...f, pdf_text: res.data.text }));
+      setPdfPages(res.data.pages);
+      setPdfStatus('done');
+    } catch (err) {
+      console.error(err);
+      setPdfStatus('error');
+    }
+  };
+
+  const fileToBase64 = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const payload = { ...form, grade_id: selectedGrade, weightage: Number(form.weightage) || 0 };
+      const payload = {
+        ...form,
+        grade_id: selectedGrade,
+        weightage: Number(form.weightage) || 0,
+        pdf_url: form.pdf_url || null,
+        // Only send pdf_text if we just extracted something new
+        pdf_text: form.pdf_text || undefined,
+      };
       if (editingId) await api.put(`/admin/syllabus/${editingId}`, payload);
       else           await api.post('/admin/syllabus', payload);
       setShowModal(false);
@@ -144,12 +174,15 @@ export default function SyllabusManagement() {
                       {unit.weightage > 0 && (
                         <span className="badge badge-purple" style={{ fontSize: '10px' }}>{unit.weightage}% weight</span>
                       )}
-                      {unit.pdf_data && (
-                        <span className="badge badge-info" style={{ fontSize: '10px', cursor: 'pointer' }}
-                          onClick={() => {
-                            const w = window.open(); w.document.write(`<iframe src="${unit.pdf_data}" style="width:100%;height:100vh;border:none;"></iframe>`);
-                          }}>
-                          <FileText size={9} style={{ marginRight: '3px' }} /> PDF
+                      {unit.pdf_url && (
+                        <a href={unit.pdf_url} target="_blank" rel="noopener noreferrer"
+                          className="badge badge-info" style={{ fontSize: '10px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                          <FileText size={9} /> PDF
+                        </a>
+                      )}
+                      {unit.has_pdf_text && (
+                        <span className="badge" style={{ fontSize: '10px', background: 'rgba(34,197,94,0.12)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                          <CheckCircle size={9} /> AI Ready
                         </span>
                       )}
                     </div>
@@ -224,23 +257,63 @@ export default function SyllabusManagement() {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Syllabus PDF (optional)</label>
-                  <label style={{
-                    display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px',
-                    background: 'var(--bg-input)', border: '1px dashed var(--border-primary)',
-                    borderRadius: '8px', cursor: 'pointer',
+                  <label className="form-label">Syllabus PDF Link (optional)</label>
+                  <input className="form-input" type="url" value={form.pdf_url}
+                    onChange={e => setForm({ ...form, pdf_url: e.target.value })}
+                    placeholder="https://drive.google.com/… or any public PDF URL" />
+                </div>
+
+                {/* PDF Upload for AI */}
+                <div className="form-group">
+                  <label className="form-label">Upload PDF for AI Analysis</label>
+                  <div style={{
+                    border: '1px dashed var(--border-color)', borderRadius: '8px',
+                    padding: '14px 16px', background: 'var(--bg-input)',
                   }}>
-                    <Upload size={16} color="var(--accent-primary)" />
-                    <span style={{ fontSize: '13px', color: pdfName ? 'var(--text-primary)' : 'var(--text-muted)' }}>
-                      {pdfName || 'Click to upload PDF'}
-                    </span>
-                    <input type="file" accept="application/pdf" style={{ display: 'none' }} onChange={handlePdfUpload} />
-                  </label>
-                  {form.pdf_data && (
-                    <button type="button" style={{ marginTop: '6px', fontSize: '11px', color: 'var(--error)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                      onClick={() => { setForm(f => ({ ...f, pdf_data: '' })); setPdfName(''); }}>
-                      Remove PDF
-                    </button>
+                    {pdfStatus === 'done' ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <CheckCircle size={18} style={{ color: '#22c55e', flexShrink: 0 }} />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '13px', fontWeight: 600, color: '#22c55e' }}>PDF text extracted successfully</div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                            {pdfPages > 0 ? `${pdfPages} page${pdfPages !== 1 ? 's' : ''} · ` : ''}{form.pdf_text.length.toLocaleString()} characters — AI will read this content
+                          </div>
+                        </div>
+                        <button type="button" className="btn btn-sm btn-secondary" style={{ fontSize: '11px', padding: '4px 10px' }}
+                          onClick={() => { setPdfStatus('idle'); setForm(f => ({ ...f, pdf_text: '' })); if (fileInputRef.current) fileInputRef.current.value = ''; }}>
+                          Remove
+                        </button>
+                      </div>
+                    ) : pdfStatus === 'extracting' ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-muted)', fontSize: '13px' }}>
+                        <div style={{ width: '16px', height: '16px', border: '2px solid var(--accent-primary)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite', flexShrink: 0 }} />
+                        Extracting text from PDF…
+                      </div>
+                    ) : pdfStatus === 'error' ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ flex: 1, fontSize: '13px', color: 'var(--error)' }}>Failed to extract text. Make sure it's a readable PDF (not scanned image).</div>
+                        <button type="button" className="btn btn-sm btn-secondary" style={{ fontSize: '11px' }}
+                          onClick={() => { setPdfStatus('idle'); if (fileInputRef.current) fileInputRef.current.value = ''; }}>
+                          Try again
+                        </button>
+                      </div>
+                    ) : (
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                        <Upload size={16} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '13px', fontWeight: 500 }}>Click to upload PDF</div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                            Text is extracted and stored — AI uses it for student predictions
+                          </div>
+                        </div>
+                        <input ref={fileInputRef} type="file" accept="application/pdf" style={{ display: 'none' }} onChange={handlePdfUpload} />
+                      </label>
+                    )}
+                  </div>
+                  {editingId && pdfStatus === 'idle' && (
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '5px' }}>
+                      Upload a new PDF to replace the existing extracted content, or leave blank to keep current.
+                    </div>
                   )}
                 </div>
               </div>

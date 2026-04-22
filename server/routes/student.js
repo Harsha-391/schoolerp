@@ -217,38 +217,6 @@ router.get('/fees', async (req, res) => {
   }
 });
 
-// POST /api/student/pay-fee
-router.post('/pay-fee', async (req, res) => {
-  try {
-    const { fee_structure_id, payment_method } = req.body;
-    const studentId = req.user.student_id;
-    const schoolId  = req.user.school_id;
-
-    const [[feeStructure]] = await db.query(
-      'SELECT * FROM fees_structure WHERE id = ?',
-      [fee_structure_id]
-    );
-    if (!feeStructure) return res.status(404).json({ error: 'Fee structure not found' });
-
-    const id         = uuidv4();
-    const receiptNo  = `REC-${Date.now()}`;
-    const today      = new Date().toISOString().split('T')[0];
-    const month      = new Date().toISOString().substring(0, 7);
-
-    await db.query(
-      `INSERT INTO fee_payments (id,student_id,school_id,fee_structure_id,amount,payment_date,payment_method,status,receipt_no,month)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      [id, studentId, schoolId, fee_structure_id, feeStructure.amount, today, payment_method||'online', 'paid', receiptNo, month]
-    );
-
-    const [[payment]] = await db.query('SELECT * FROM fee_payments WHERE id = ?', [id]);
-    res.status(201).json(payment);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
 // GET /api/student/profile
 router.get('/profile', async (req, res) => {
   try {
