@@ -25,6 +25,8 @@ import PaymentConfig from './pages/admin/PaymentConfig';
 import FinanceAnalytics from './pages/admin/FinanceAnalytics';
 import QRScanner from './pages/admin/QRScanner';
 import SyllabusManagement from './pages/admin/SyllabusManagement';
+import StaffAttendanceLogs from './pages/admin/StaffAttendanceLogs';
+import StudentAttendanceLogs from './pages/admin/StudentAttendanceLogs';
 
 // Staff
 import StaffDashboard from './pages/staff/StaffDashboard';
@@ -93,6 +95,8 @@ export default function App() {
           <Route path="/admin/fees" element={<ProtectedRoute allowedRoles={['school_admin']}><FeeManagement /></ProtectedRoute>} />
           <Route path="/admin/exams" element={<ProtectedRoute allowedRoles={['school_admin']}><ExamManagement /></ProtectedRoute>} />
           <Route path="/admin/qr-scanner" element={<ProtectedRoute allowedRoles={['school_admin']}><QRScanner /></ProtectedRoute>} />
+          <Route path="/admin/attendance/staff" element={<ProtectedRoute allowedRoles={['school_admin']}><StaffAttendanceLogs /></ProtectedRoute>} />
+          <Route path="/admin/attendance/students" element={<ProtectedRoute allowedRoles={['school_admin']}><StudentAttendanceLogs /></ProtectedRoute>} />
           <Route path="/admin/leaves" element={<ProtectedRoute allowedRoles={['school_admin']}><LeaveManagement /></ProtectedRoute>} />
           <Route path="/admin/holidays" element={<ProtectedRoute allowedRoles={['school_admin']}><HolidayCalendar /></ProtectedRoute>} />
           <Route path="/admin/payments" element={<ProtectedRoute allowedRoles={['school_admin']}><PaymentVerification /></ProtectedRoute>} />

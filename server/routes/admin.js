@@ -537,15 +537,34 @@ router.put('/leaves/:id', async (req, res) => {
 // ── Attendance ─────────────────────────────────────────────────────────────────
 router.get('/attendance/students', async (req, res) => {
   try {
-    const { date, grade_id, section_id } = req.query;
-    let sql = `SELECT a.*, s.name AS student_name, s.roll_number
+    const { date, month, grade_id, section_id } = req.query;
+    let sql = `SELECT a.*, s.name AS student_name, s.roll_number, s.grade_id, s.section_id
                FROM attendance_students a
                LEFT JOIN students s ON a.student_id = s.id
                WHERE a.school_id = ?`;
     const params = [req.user.school_id];
-    if (date)       { sql += ' AND a.date = ?';        params.push(date); }
-    if (grade_id)   { sql += ' AND s.grade_id = ?';    params.push(grade_id); }
-    if (section_id) { sql += ' AND s.section_id = ?';  params.push(section_id); }
+    if (date)       { sql += ' AND a.date = ?';              params.push(date); }
+    if (month)      { sql += ' AND DATE_FORMAT(a.date,"%Y-%m") = ?'; params.push(month); }
+    if (grade_id)   { sql += ' AND s.grade_id = ?';          params.push(grade_id); }
+    if (section_id) { sql += ' AND s.section_id = ?';        params.push(section_id); }
+    sql += ' ORDER BY a.date DESC, s.roll_number';
+    const [rows] = await db.query(sql, params);
+    res.json(rows);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+router.get('/attendance/staff', async (req, res) => {
+  try {
+    const { staff_id, date, month } = req.query;
+    let sql = `SELECT a.*, st.name AS staff_name, st.designation, st.department
+               FROM attendance_staff a
+               LEFT JOIN staff st ON a.staff_id = st.id
+               WHERE a.school_id = ?`;
+    const params = [req.user.school_id];
+    if (staff_id) { sql += ' AND a.staff_id = ?';                    params.push(staff_id); }
+    if (date)     { sql += ' AND a.date = ?';                        params.push(date); }
+    if (month)    { sql += ' AND DATE_FORMAT(a.date,"%Y-%m") = ?';   params.push(month); }
+    sql += ' ORDER BY a.date DESC, st.name';
     const [rows] = await db.query(sql, params);
     res.json(rows);
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
