@@ -10,6 +10,26 @@ import adminRoutes from './routes/admin.js';
 import staffRoutes from './routes/staff.js';
 import studentRoutes from './routes/student.js';
 import paymentRoutes from './routes/payments.js';
+import db from './config/db.js';
+
+async function ensureTables() {
+  const stmts = [
+    `CREATE TABLE IF NOT EXISTS grade_subjects (
+      id VARCHAR(36) PRIMARY KEY,
+      school_id VARCHAR(36) NOT NULL,
+      grade_id VARCHAR(36) NOT NULL,
+      subject_id VARCHAR(36) NOT NULL,
+      UNIQUE KEY uniq_grade_subject (grade_id, subject_id)
+    )`,
+    `ALTER TABLE syllabus_units ADD COLUMN IF NOT EXISTS subject_id VARCHAR(36)`,
+    `ALTER TABLE syllabus_units ADD COLUMN IF NOT EXISTS pdf_url VARCHAR(500)`,
+    `ALTER TABLE syllabus_units ADD COLUMN IF NOT EXISTS pdf_text MEDIUMTEXT`,
+  ];
+  for (const sql of stmts) {
+    try { await db.query(sql); } catch (_) {}
+  }
+  console.log('✅ DB tables verified');
+}
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -55,6 +75,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Start server
+ensureTables().catch(console.error);
 app.listen(PORT, () => {
   console.log(`\n🚀 School ERP Server running on http://localhost:${PORT}`);
   console.log(`\n📋 Login Credentials:`);
