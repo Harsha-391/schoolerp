@@ -278,10 +278,13 @@ router.get('/grades', async (req, res) => {
       'SELECT grade_id, COUNT(*) AS cnt FROM students WHERE school_id = ? AND is_active = 1 GROUP BY grade_id',
       [schoolId]
     );
-    const [gradeSubjects] = await db.query(
-      'SELECT gs.grade_id, s.id, s.name FROM grade_subjects gs JOIN subjects s ON gs.subject_id = s.id WHERE gs.school_id = ?',
-      [schoolId]
-    );
+    let gradeSubjects = [];
+    try {
+      [gradeSubjects] = await db.query(
+        'SELECT gs.grade_id, s.id, s.name FROM grade_subjects gs JOIN subjects s ON gs.subject_id = s.id WHERE gs.school_id = ?',
+        [schoolId]
+      );
+    } catch (_) { /* grade_subjects table not yet created */ }
     const countMap = Object.fromEntries(stuCounts.map(r => [r.grade_id, r.cnt]));
     const subjectsMap = {};
     for (const row of gradeSubjects) {
