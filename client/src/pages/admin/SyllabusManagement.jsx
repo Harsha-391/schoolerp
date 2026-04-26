@@ -4,16 +4,18 @@ import api from '../../utils/api';
 import { Plus, X, Edit, Trash2, BookOpen, FileText, ChevronDown, Upload, CheckCircle } from 'lucide-react';
 
 export default function SyllabusManagement() {
-  const [grades,        setGrades]        = useState([]);
-  const [selectedGrade, setSelectedGrade] = useState('');
-  const [units,         setUnits]         = useState([]);
-  const [showModal,     setShowModal]     = useState(false);
-  const [editingId,     setEditingId]     = useState(null);
-  const [loading,       setLoading]       = useState(false);
+  const [grades,          setGrades]          = useState([]);
+  const [selectedGrade,   setSelectedGrade]   = useState('');
+  const [gradeSubjects,   setGradeSubjects]   = useState([]);
+  const [selectedSubject, setSelectedSubject] = useState('');
+  const [units,           setUnits]           = useState([]);
+  const [showModal,       setShowModal]       = useState(false);
+  const [editingId,       setEditingId]       = useState(null);
+  const [loading,         setLoading]         = useState(false);
 
   const emptyForm = { unit_number: 1, unit_name: '', description: '', outcomes: '', weightage: '', pdf_url: '', pdf_text: '' };
   const [form, setForm] = useState(emptyForm);
-  const [pdfStatus, setPdfStatus] = useState('idle'); // idle | extracting | done | error
+  const [pdfStatus, setPdfStatus] = useState('idle');
   const [pdfPages, setPdfPages]   = useState(0);
   const fileInputRef = useRef(null);
 
@@ -24,13 +26,25 @@ export default function SyllabusManagement() {
     });
   }, []);
 
+  // When grade changes, update the subject list and reset subject selection
   useEffect(() => {
-    if (selectedGrade) loadUnits();
-  }, [selectedGrade]);
+    if (!selectedGrade) return;
+    const grade = grades.find(g => g.id === selectedGrade);
+    const subjects = grade?.subjects || [];
+    setGradeSubjects(subjects);
+    setSelectedSubject(subjects[0]?.id || '');
+    setUnits([]);
+  }, [selectedGrade, grades]);
+
+  // When subject changes, reload units
+  useEffect(() => {
+    if (selectedGrade && selectedSubject) loadUnits();
+    else setUnits([]);
+  }, [selectedSubject]);
 
   const loadUnits = () => {
     setLoading(true);
-    api.get(`/admin/syllabus/${selectedGrade}`)
+    api.get(`/admin/syllabus/${selectedGrade}`, { params: { subject_id: selectedSubject } })
       .then(res => setUnits(res.data))
       .finally(() => setLoading(false));
   };
@@ -48,7 +62,7 @@ export default function SyllabusManagement() {
       unit_number: unit.unit_number, unit_name: unit.unit_name,
       description: unit.description || '', outcomes: unit.outcomes || '',
       weightage: unit.weightage || '', pdf_url: unit.pdf_url || '',
-      pdf_text: '', // don't load existing text into form, just preserve on save
+      pdf_text: '',
     });
     setEditingId(unit.id);
     setPdfStatus(unit.has_pdf_text ? 'done' : 'idle');
@@ -59,10 +73,7 @@ export default function SyllabusManagement() {
   const handlePdfUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.type !== 'application/pdf') {
-      alert('Please select a PDF file.');
-      return;
-    }
+    if (file.type !== 'application/pdf') { alert('Please select a PDF file.'); return; }
     setPdfStatus('extracting');
     try {
       const base64 = await fileToBase64(file);
@@ -89,9 +100,9 @@ export default function SyllabusManagement() {
       const payload = {
         ...form,
         grade_id: selectedGrade,
+        subject_id: selectedSubject,
         weightage: Number(form.weightage) || 0,
         pdf_url: form.pdf_url || null,
-        // Only send pdf_text if we just extracted something new
         pdf_text: form.pdf_text || undefined,
       };
       if (editingId) await api.put(`/admin/syllabus/${editingId}`, payload);
@@ -110,7 +121,8 @@ export default function SyllabusManagement() {
   };
 
   const totalWeightage = units.reduce((s, u) => s + Number(u.weightage), 0);
-  const selectedGradeName = grades.find(g => g.id === selectedGrade)?.name || '';
+  const selectedGradeName   = grades.find(g => g.id === selectedGrade)?.name || '';
+  const selectedSubjectName = gradeSubjects.find(s => s.id === selectedSubject)?.name || '';
 
   return (
     <Layout title="Syllabus" subtitle="Manage curriculum units per grade">
@@ -118,38 +130,67 @@ export default function SyllabusManagement() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Syllabus & Curriculum</h1>
-          <p className="page-subtitle">{selectedGradeName} — {units.length} unit{units.length !== 1 ? 's' : ''}</p>
+          <p className="page-subtitle">
+            {selectedGradeName}{selectedSubjectName ? ` · ${selectedSubjectName}` : ''} — {units.length} unit{units.length !== 1 ? 's' : ''}
+          </p>
         </div>
-        <button className="btn btn-primary" onClick={openAdd}>
+        <button className="btn btn-primary" onClick={openAdd} disabled={!selectedSubject}>
           <Plus size={16} /> Add Unit
         </button>
       </div>
 
-      {/* Grade selector */}
-      <div style={{ marginBottom: '16px', display: 'flex', gap: '8px', alignItems: 'center' }}>
-        <div style={{ position: 'relative', flex: '0 0 auto' }}>
+      {/* Grade + Subject selectors */}
+      <div style={{ marginBottom: '16px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+        {/* Grade */}
+        <div style={{ position: 'relative' }}>
           <select className="form-select" value={selectedGrade} onChange={e => setSelectedGrade(e.target.value)}
             style={{ paddingRight: '32px', minWidth: '160px' }}>
             {grades.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
           </select>
           <ChevronDown size={14} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-muted)' }} />
         </div>
+
+        {/* Subject */}
+        {gradeSubjects.length > 0 ? (
+          <div style={{ position: 'relative' }}>
+            <select className="form-select" value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)}
+              style={{ paddingRight: '32px', minWidth: '160px' }}>
+              {gradeSubjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <ChevronDown size={14} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-muted)' }} />
+          </div>
+        ) : (
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', padding: '6px 12px', background: 'var(--bg-card-hover)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+            No subjects assigned to {selectedGradeName} — go to Grades & Sections to assign subjects
+          </div>
+        )}
+
         {totalWeightage > 0 && (
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '4px' }}>
             Total weightage: <strong style={{ color: totalWeightage === 100 ? 'var(--success)' : 'var(--warning)' }}>{totalWeightage.toFixed(1)}%</strong>
             {totalWeightage !== 100 && <span style={{ color: 'var(--warning)' }}> (should sum to 100%)</span>}
           </div>
         )}
       </div>
 
-      {loading ? (
+      {!selectedSubject ? (
+        <div className="card">
+          <div className="empty-state" style={{ padding: '48px 20px' }}>
+            <BookOpen size={32} style={{ marginBottom: '12px', opacity: 0.3 }} />
+            <div style={{ fontWeight: 600, marginBottom: '4px' }}>No subject selected</div>
+            <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+              Assign subjects to {selectedGradeName} from the Grades & Sections page first
+            </div>
+          </div>
+        </div>
+      ) : loading ? (
         <div className="card"><div className="empty-state">Loading…</div></div>
       ) : units.length === 0 ? (
         <div className="card">
           <div className="empty-state" style={{ padding: '48px 20px' }}>
             <BookOpen size={32} style={{ marginBottom: '12px', opacity: 0.3 }} />
             <div style={{ fontWeight: 600, marginBottom: '4px' }}>No units yet</div>
-            <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Add syllabus units for {selectedGradeName}</div>
+            <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Add syllabus units for {selectedGradeName} · {selectedSubjectName}</div>
           </div>
         </div>
       ) : (
@@ -158,7 +199,6 @@ export default function SyllabusManagement() {
             <div className="card" key={unit.id}>
               <div className="card-body" style={{ padding: '16px 18px' }}>
                 <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
-                  {/* Unit number badge */}
                   <div style={{
                     width: '40px', height: '40px', borderRadius: '10px', flexShrink: 0,
                     background: 'var(--accent-soft)', color: 'var(--accent-primary)',
@@ -217,7 +257,9 @@ export default function SyllabusManagement() {
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <div className="modal-title">{editingId ? 'Edit Unit' : 'Add Syllabus Unit'}</div>
+              <div className="modal-title">
+                {editingId ? 'Edit Unit' : `Add Unit — ${selectedGradeName} · ${selectedSubjectName}`}
+              </div>
               <button className="modal-close" onClick={() => setShowModal(false)}><X size={16} /></button>
             </div>
             <form onSubmit={handleSubmit}>
@@ -263,20 +305,16 @@ export default function SyllabusManagement() {
                     placeholder="https://drive.google.com/… or any public PDF URL" />
                 </div>
 
-                {/* PDF Upload for AI */}
                 <div className="form-group">
                   <label className="form-label">Upload PDF for AI Analysis</label>
-                  <div style={{
-                    border: '1px dashed var(--border-color)', borderRadius: '8px',
-                    padding: '14px 16px', background: 'var(--bg-input)',
-                  }}>
+                  <div style={{ border: '1px dashed var(--border-color)', borderRadius: '8px', padding: '14px 16px', background: 'var(--bg-input)' }}>
                     {pdfStatus === 'done' ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <CheckCircle size={18} style={{ color: '#22c55e', flexShrink: 0 }} />
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: '13px', fontWeight: 600, color: '#22c55e' }}>PDF text extracted successfully</div>
                           <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                            {pdfPages > 0 ? `${pdfPages} page${pdfPages !== 1 ? 's' : ''} · ` : ''}{form.pdf_text.length.toLocaleString()} characters — AI will read this content
+                            {pdfPages > 0 ? `${pdfPages} page${pdfPages !== 1 ? 's' : ''} · ` : ''}{form.pdf_text.length.toLocaleString()} characters
                           </div>
                         </div>
                         <button type="button" className="btn btn-sm btn-secondary" style={{ fontSize: '11px', padding: '4px 10px' }}
@@ -291,7 +329,7 @@ export default function SyllabusManagement() {
                       </div>
                     ) : pdfStatus === 'error' ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <div style={{ flex: 1, fontSize: '13px', color: 'var(--error)' }}>Failed to extract text. Make sure it's a readable PDF (not scanned image).</div>
+                        <div style={{ flex: 1, fontSize: '13px', color: 'var(--error)' }}>Failed to extract text. Make sure it's a readable PDF.</div>
                         <button type="button" className="btn btn-sm btn-secondary" style={{ fontSize: '11px' }}
                           onClick={() => { setPdfStatus('idle'); if (fileInputRef.current) fileInputRef.current.value = ''; }}>
                           Try again
@@ -312,7 +350,7 @@ export default function SyllabusManagement() {
                   </div>
                   {editingId && pdfStatus === 'idle' && (
                     <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '5px' }}>
-                      Upload a new PDF to replace the existing extracted content, or leave blank to keep current.
+                      Upload a new PDF to replace existing content, or leave blank to keep current.
                     </div>
                   )}
                 </div>

@@ -314,6 +314,13 @@ async function createTables() {
       month VARCHAR(7),
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
+    `CREATE TABLE IF NOT EXISTS grade_subjects (
+      id VARCHAR(36) PRIMARY KEY,
+      school_id VARCHAR(36) NOT NULL,
+      grade_id VARCHAR(36) NOT NULL,
+      subject_id VARCHAR(36) NOT NULL,
+      UNIQUE KEY uniq_grade_subject (grade_id, subject_id)
+    )`,
   ];
 
   for (const sql of tables) {
@@ -331,6 +338,9 @@ async function createTables() {
     "ALTER TABLE attendance_students ADD COLUMN IF NOT EXISTS check_in VARCHAR(10)",
     "ALTER TABLE attendance_students ADD COLUMN IF NOT EXISTS check_out VARCHAR(10)",
     "ALTER TABLE exams ADD COLUMN IF NOT EXISTS unit_id VARCHAR(36)",
+    "ALTER TABLE syllabus_units ADD COLUMN IF NOT EXISTS subject_id VARCHAR(36)",
+    "ALTER TABLE syllabus_units ADD COLUMN IF NOT EXISTS pdf_url VARCHAR(500)",
+    "ALTER TABLE syllabus_units ADD COLUMN IF NOT EXISTS pdf_text MEDIUMTEXT",
   ];
   for (const sql of alters) {
     try { await pool.query(sql); } catch (_) { /* column already exists or no-op */ }

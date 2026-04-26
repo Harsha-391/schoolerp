@@ -278,11 +278,21 @@ router.get('/grades', async (req, res) => {
       'SELECT grade_id, COUNT(*) AS cnt FROM students WHERE school_id = ? AND is_active = 1 GROUP BY grade_id',
       [schoolId]
     );
+    const [gradeSubjects] = await db.query(
+      'SELECT gs.grade_id, s.id, s.name FROM grade_subjects gs JOIN subjects s ON gs.subject_id = s.id WHERE gs.school_id = ?',
+      [schoolId]
+    );
     const countMap = Object.fromEntries(stuCounts.map(r => [r.grade_id, r.cnt]));
+    const subjectsMap = {};
+    for (const row of gradeSubjects) {
+      if (!subjectsMap[row.grade_id]) subjectsMap[row.grade_id] = [];
+      subjectsMap[row.grade_id].push({ id: row.id, name: row.name });
+    }
     res.json(grades.map(g => ({
       ...g,
       sections:      sections.filter(s => s.grade_id === g.id),
       student_count: countMap[g.id] || 0,
+      subjects:      subjectsMap[g.id] || [],
     })));
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
@@ -333,6 +343,31 @@ router.delete('/sections/:id', async (req, res) => {
     );
     if (cnt > 0) return res.status(400).json({ error: 'Cannot delete section with active students' });
     await db.query('DELETE FROM sections WHERE id = ? AND school_id = ?', [req.params.id, req.user.school_id]);
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+router.post('/grades/:id/subjects', async (req, res) => {
+  try {
+    const { subject_id } = req.body;
+    const schoolId = req.user.school_id;
+    if (!subject_id) return res.status(400).json({ error: 'subject_id required' });
+    const id = uuidv4();
+    await db.query(
+      'INSERT IGNORE INTO grade_subjects (id, school_id, grade_id, subject_id) VALUES (?,?,?,?)',
+      [id, schoolId, req.params.id, subject_id]
+    );
+    const [[sub]] = await db.query('SELECT * FROM subjects WHERE id = ?', [subject_id]);
+    res.status(201).json(sub);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+router.delete('/grades/:id/subjects/:subjectId', async (req, res) => {
+  try {
+    await db.query(
+      'DELETE FROM grade_subjects WHERE grade_id = ? AND subject_id = ? AND school_id = ?',
+      [req.params.id, req.params.subjectId, req.user.school_id]
+    );
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
@@ -516,8 +551,27 @@ router.get('/attendance/students', async (req, res) => {
 // ── Subjects ───────────────────────────────────────────────────────────────────
 router.get('/subjects', async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM subjects WHERE school_id = ?', [req.user.school_id]);
+    const [rows] = await db.query('SELECT * FROM subjects WHERE school_id = ? ORDER BY name', [req.user.school_id]);
     res.json(rows);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+router.post('/subjects', async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: 'name required' });
+    const id = uuidv4();
+    await db.query('INSERT INTO subjects (id, school_id, name) VALUES (?,?,?)', [id, req.user.school_id, name.trim()]);
+    const [[row]] = await db.query('SELECT * FROM subjects WHERE id = ?', [id]);
+    res.status(201).json(row);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+router.delete('/subjects/:id', async (req, res) => {
+  try {
+    await db.query('DELETE FROM grade_subjects WHERE subject_id = ? AND school_id = ?', [req.params.id, req.user.school_id]);
+    await db.query('DELETE FROM subjects WHERE id = ? AND school_id = ?', [req.params.id, req.user.school_id]);
+    res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
@@ -776,24 +830,26 @@ router.post('/syllabus/extract-pdf', async (req, res) => {
 
 router.get('/syllabus/:grade_id', async (req, res) => {
   try {
-    const [units] = await db.query(
-      'SELECT id,school_id,grade_id,unit_number,unit_name,description,outcomes,weightage,pdf_url,(pdf_text IS NOT NULL AND pdf_text != "") AS has_pdf_text FROM syllabus_units WHERE school_id=? AND grade_id=? ORDER BY unit_number',
-      [req.user.school_id, req.params.grade_id]
-    );
+    const { subject_id } = req.query;
+    let sql = 'SELECT id,school_id,grade_id,subject_id,unit_number,unit_name,description,outcomes,weightage,pdf_url,(pdf_text IS NOT NULL AND pdf_text != "") AS has_pdf_text FROM syllabus_units WHERE school_id=? AND grade_id=?';
+    const params = [req.user.school_id, req.params.grade_id];
+    if (subject_id) { sql += ' AND subject_id=?'; params.push(subject_id); }
+    sql += ' ORDER BY unit_number';
+    const [units] = await db.query(sql, params);
     res.json(units);
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 router.post('/syllabus', async (req, res) => {
   try {
-    const { grade_id, unit_number, unit_name, description, outcomes, weightage, pdf_url, pdf_text } = req.body;
+    const { grade_id, subject_id, unit_number, unit_name, description, outcomes, weightage, pdf_url, pdf_text } = req.body;
     if (!grade_id || !unit_name) return res.status(400).json({ error: 'grade_id and unit_name required' });
     const id = uuidv4();
     await db.query(
-      'INSERT INTO syllabus_units (id,school_id,grade_id,unit_number,unit_name,description,outcomes,weightage,pdf_url,pdf_text) VALUES (?,?,?,?,?,?,?,?,?,?)',
-      [id, req.user.school_id, grade_id, unit_number||1, unit_name, description||'', outcomes||'', weightage||0, pdf_url||null, pdf_text||null]
+      'INSERT INTO syllabus_units (id,school_id,grade_id,subject_id,unit_number,unit_name,description,outcomes,weightage,pdf_url,pdf_text) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+      [id, req.user.school_id, grade_id, subject_id||null, unit_number||1, unit_name, description||'', outcomes||'', weightage||0, pdf_url||null, pdf_text||null]
     );
-    const [[unit]] = await db.query('SELECT id,school_id,grade_id,unit_number,unit_name,description,outcomes,weightage,pdf_url,(pdf_text IS NOT NULL AND pdf_text != "") AS has_pdf_text FROM syllabus_units WHERE id=?', [id]);
+    const [[unit]] = await db.query('SELECT id,school_id,grade_id,subject_id,unit_number,unit_name,description,outcomes,weightage,pdf_url,(pdf_text IS NOT NULL AND pdf_text != "") AS has_pdf_text FROM syllabus_units WHERE id=?', [id]);
     res.status(201).json(unit);
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
